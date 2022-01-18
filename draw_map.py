@@ -26,6 +26,7 @@ from datetime import datetime
 from math import nan, isnan
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import matplotlib.lines as mlines
 import cartopy.crs as ccrs
 import cartopy.feature as cfea
 from pathlib import Path
@@ -75,7 +76,8 @@ for csv_file in csv_files:
 # ==============================================================================
 # Draw Japan
 # ==============================================================================
-fig = plt.figure( figsize = (16, 8) )
+plt.rcParams['font.family'] = 'monospace'
+fig = plt.figure( figsize = (10, 5) )
 ax = fig.add_subplot( 1, 1, 1,
                       projection = ccrs.PlateCarree( central_longitude = 180 ) )
 START_LATITUDE_DEG  =  24.0
@@ -96,25 +98,69 @@ FIG_OUTPUT_DIR = Path( 'figure' )
 FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
 
 MAX_PRESSURE_HPA_DIFF = 0.5
+color_map = lambda dp: cm.rainbow( dp / MAX_PRESSURE_HPA_DIFF / 2.0 + 0.5 )
 
 date_times = sorted( list( set( [ record.date_time for record in records ] ) ) )
-for date_time in date_times:
+for date_time in date_times[100:]:
     matched_records = [ record for record in records if record.date_time == date_time ]
     points = []
+    longitude_degs = []
+    latitude_degs  = []
+    pressure_hPa_diffs = []
+    
     for matched_record in matched_records:
         
         if isnan( matched_record.pressure_hPa_diff ):
             continue
 
-        color = cm.rainbow( matched_record.pressure_hPa_diff / MAX_PRESSURE_HPA_DIFF / 2.0 + 0.5 )
-
         p = ax.plot( matched_record.longitude_deg,
                      matched_record.latitude_deg,
                      'o',
                      transform = ccrs.PlateCarree(),
-                     markersize = 7,
-                     color = color )
+                     markersize = 5,
+                     color = color_map( matched_record.pressure_hPa_diff ) )
         points.append( p )
+
+        if not isnan( matched_record.pressure_hPa_diff ):
+            longitude_degs.append( matched_record.longitude_deg )
+            latitude_degs.append( matched_record.latitude_deg )
+            pressure_hPa_diffs.append( matched_record.pressure_hPa_diff )
+
+# Removed contour plots because they are just ugly...
+#
+#    lines = ax.tricontour( longitude_degs, latitude_degs, pressure_hPa_diffs,
+#                           linestyles = '-',
+#                           colors = 'black',
+#                           linewidth = 0.5,
+#                           transform = ccrs.PlateCarree(),
+#                           levels = np.linspace(-MAX_PRESSURE_HPA_DIFF * 1.1, MAX_PRESSURE_HPA_DIFF * 1.1, 23) )
+
+    legend_items = []
+
+    legend_title_lines = [f'{date_time.strftime("%Y-%m-%d %H:%M")} (JST)',
+                           'Barometric Pressure Difference',
+                           'from 10 Minutes Ago']
+
+    legend_dps = np.linspace( MAX_PRESSURE_HPA_DIFF, -MAX_PRESSURE_HPA_DIFF, 5 )
+    for legend_dp in legend_dps:
+        legend_marker = mlines.Line2D( [], [],
+                                       color = color_map( legend_dp ),
+                                       marker = 'o',
+                                       linestyle = 'None',
+                                       markersize = 5,
+                                       label = f'{legend_dp:+4.2f} hPa' )
+        legend_items.append( legend_marker )
+
+    legend_text_lines = ['Visualized by ',
+                         'Takashi Nakamoto']
+    for legend_text_line in legend_text_lines:
+        legend_text = mlines.Line2D( [], [], marker = 'None', linestyle = 'None',
+                                     label = legend_text_line)
+        legend_items.append( legend_text )
+
+    ax.legend( handles = legend_items,
+               title = '\n'.join(legend_title_lines),
+               loc = 'center right' )
 
     date_time_str = date_time.strftime('%Y%m%d_%H%M')
     fig_output_filename = FIG_OUTPUT_DIR / f'{date_time_str}.png'
@@ -126,6 +172,6 @@ for date_time in date_times:
         pp.remove()
         del pp
 
-
-
-
+#    for l in lines.collections:
+#        l.remove()
+#        del l
