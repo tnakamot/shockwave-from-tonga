@@ -71,7 +71,7 @@ def read_pressure_data(filename):
 
 def fig2img(fig):
     buf = io.BytesIO()
-    fig.savefig( buf )
+    fig.savefig( buf, bbox_inches='tight', pad_inches = 0 )
     buf.seek( 0 )
     img = Image.open( buf )
     return img
