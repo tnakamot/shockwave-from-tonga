@@ -31,7 +31,7 @@ from matplotlib.font_manager import findfont, FontProperties
 import cartopy.crs as ccrs
 import cartopy.feature as cfea
 from pathlib import Path
-from geopy import distance
+from geopy.distance import geodesic
 from PIL import Image, ImageDraw, ImageFont
 import io
 from scipy import optimize
@@ -91,8 +91,8 @@ hunga_tonga_coord = ( -20.536   , -175.382   )
 antipode_coord    = ( - hunga_tonga_coord[0], 180 + hunga_tonga_coord[1] )
 kyoto_coord       = (  35.011611,  135.768111)
 
-earth_circumference  = distance.distance( hunga_tonga_coord, antipode_coord ) * 2
-hunga_tonga_to_kyoto = distance.distance( hunga_tonga_coord, kyoto_coord )
+earth_circumference  = geodesic( hunga_tonga_coord, antipode_coord ) * 2
+hunga_tonga_to_kyoto = geodesic( hunga_tonga_coord, kyoto_coord )
 
 # Travel distance of the 1st, 2nd, 3rd, 4th and 5th shockwaves.
 travel_distances = [
@@ -200,12 +200,12 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
         # Draw estimated wavefront.
         if shockwave_i == 0:
             # Expected wavefront distance from Hunga Tonga.
-            distance_m = travel_speed_m_s * ( date_time - eruption_time ).seconds
-            wavefront_latitude_deg  = np.linspace( START_LATITUDE_DEG, END_LATITUDE_DEG, 10 )
-            wavefront_longitude_deg = []
-            for lat_deg in wavefront_latitude_deg:
-                f = lambda lon_deg: distance.distance( hunga_tonga_coord, (lat_deg, lon_deg) ).m - distance_m
-                wavefront_longitude_deg.append( optimize.fsolve( f, kyoto_coord[1] )[0] )
+            distance = geodesic( meters = travel_speed_m_s * ( date_time - eruption_time ).seconds )
+            bearings = np.linspace(-180, 180, 360)
+            wavefront_points = [ distance.destination( point = hunga_tonga_coord, bearing = b ) for b in bearings ]
+
+            wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
+            wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
 
             ax.plot( wavefront_longitude_deg,
                      wavefront_latitude_deg,
