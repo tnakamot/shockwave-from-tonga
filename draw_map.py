@@ -127,23 +127,20 @@ for csv_file in csv_files:
     records.extend( read_pressure_data( csv_file ) )
 
 # ==============================================================================
-# Draw Japan
+# Map drawing settings
 # ==============================================================================
 plt.rcParams['font.family'] = 'monospace'
-fig = plt.figure( figsize = (10, 5) )
-ax = fig.add_subplot( 1, 1, 1,
-                      projection = ccrs.PlateCarree( central_longitude = 180 ) )
+
 START_LATITUDE_DEG  =  24.0
 END_LATITUDE_DEG    =  46.0
 START_LONGITUDE_DEG = 120.0
 END_LONGITUDE_DEG   = 160.0
 
-ax.set_extent( ( START_LONGITUDE_DEG, END_LONGITUDE_DEG,
-                 START_LATITUDE_DEG, END_LATITUDE_DEG ),
-               ccrs.PlateCarree() )
+FIG_SIZE = (10, 5)
+OCEAN_COLOR = '#00FFFF'
+LAND_COLOR  = '#32CD32'
 
-ax.add_feature( cfea.OCEAN, color = '#00FFFF' )
-ax.add_feature( cfea.LAND,  color = '#32CD32' )
+fig = plt.figure( figsize = FIG_SIZE )
 
 # ==============================================================================
 # Plot pressure data every 10 minutes
@@ -156,6 +153,7 @@ color_map = lambda dp: cm.rainbow( dp / MAX_PRESSURE_HPA_DIFF / 2.0 + 0.5 )
 
 recorded_date_times = sorted( list( set( [ record.date_time for record in records ] ) ) )
 
+
 for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arrival_times ):
     start_time = estimated_kyoto_arrival_time - timedelta( hours = 3 )
     end_time   = estimated_kyoto_arrival_time + timedelta( hours = 5 )
@@ -164,12 +162,22 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
     for date_time in recorded_date_times:
         if date_time < start_time or date_time > end_time:
             continue
+
+        # Draw the base map.
+        ax = fig.add_subplot( 1, 1, 1,
+                              projection = ccrs.PlateCarree() )
+        ax.set_extent( ( START_LONGITUDE_DEG, END_LONGITUDE_DEG,
+                         START_LATITUDE_DEG, END_LATITUDE_DEG ),
+                       ccrs.PlateCarree() )
+
+        ax.add_feature( cfea.OCEAN, color = OCEAN_COLOR )
+        ax.add_feature( cfea.LAND,  color = LAND_COLOR )
         
-        matched_records = [ record for record in records if record.date_time == date_time ]
         points = []
         longitude_degs = []
         latitude_degs  = []
         pressure_hPa_diffs = []
+        matched_records = [ record for record in records if record.date_time == date_time ]
 
         # Plot the pressure difference data in the map.
         for matched_record in matched_records:
@@ -177,13 +185,12 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
             if isnan( matched_record.pressure_hPa_diff ):
                 continue
 
-            p = ax.plot( matched_record.longitude_deg,
-                         matched_record.latitude_deg,
-                         'o',
-                         transform = ccrs.PlateCarree(),
-                         markersize = 5,
-                         color = color_map( matched_record.pressure_hPa_diff ) )
-            points.append( p )
+            ax.plot( matched_record.longitude_deg,
+                     matched_record.latitude_deg,
+                     'o',
+                     transform = ccrs.PlateCarree(),
+                     markersize = 5,
+                     color = color_map( matched_record.pressure_hPa_diff ) )
 
             if not isnan( matched_record.pressure_hPa_diff ):
                 longitude_degs.append( matched_record.longitude_deg )
@@ -200,10 +207,10 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
                 f = lambda lon_deg: distance.distance( hunga_tonga_coord, (lat_deg, lon_deg) ).m - distance_m
                 wavefront_longitude_deg.append( optimize.fsolve( f, kyoto_coord[1] )[0] )
 
-            lines = ax.plot( wavefront_longitude_deg,
-                             wavefront_latitude_deg,
-                             transform = ccrs.PlateCarree(),
-                             color = 'black' )
+            ax.plot( wavefront_longitude_deg,
+                     wavefront_latitude_deg,
+                     transform = ccrs.PlateCarree(),
+                     color = 'black' )
 
         # Generate legend.
         legend_items = []
@@ -244,16 +251,7 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
             fig.savefig( fig_output_filename, bbox_inches='tight', pad_inches = 0 )
             print( f'Generated {fig_output_filename}' )
 
-        for p in points:
-            pp = p.pop(0)
-            pp.remove()
-            del pp
-
-        if lines:
-            ll = lines.pop(0)
-            ll.remove()
-            del ll
-            lines = None
+        fig.clear()
 
     if GENERATE_ANIMATION_GIF:
         # Generate the cover page.
