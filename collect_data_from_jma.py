@@ -23,9 +23,11 @@
 import urllib.request
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from math import nan
+
+TZ_JST = timezone( timedelta( hours = +9 ), name = 'JST' ) # Japan Standard Time
 
 class JmaArea:
     def __init__(self, name, prec_no):
@@ -96,12 +98,12 @@ def get_jma_stations(area):
         
     return stations
 
-def get_jma_ten_minutes_data_per_day(station, date):
+def get_jma_ten_minutes_data_per_day(station, date_jst):
     prec_no  = station.area.prec_no
     block_no = station.block_no
-    year     = date.year
-    month    = date.month
-    day      = date.day
+    year     = date_jst.year
+    month    = date_jst.month
+    day      = date_jst.day
 
     date_time    = []
     pressure_hPa = []
@@ -118,9 +120,9 @@ def get_jma_ten_minutes_data_per_day(station, date):
         hour, minute = [ int( s ) for s in cells[0].string.split(':') ]
         
         if hour == 24:
-            date_time.append( datetime( year, month, day, 0, 0 ) + timedelta( days = 1 ) )
+            date_time.append( datetime( year, month, day, 0, 0, tzinfo = TZ_JST ) + timedelta( days = 1 ) )
         else:
-            date_time.append( datetime( year, month, day, hour, minute ) )
+            date_time.append( datetime( year, month, day, hour, minute, tzinfo = TZ_JST ) )
 
         try:
             p = float( cells[1].string )
@@ -136,13 +138,13 @@ def get_jma_ten_minutes_data_per_day(station, date):
 
     return date_time, pressure_hPa, sea_level_pressure_hPa
 
-def get_jma_ten_minutes_data(station, start_date_jst, end_date_jst):
-    current_date_jst = start_date_jst
+def get_jma_ten_minutes_data(station, start_date, end_date):
+    current_date_jst = start_date.astimezone( TZ_JST )
     date_time = []
     pressure_hPa = []
     sea_level_pressure_hPa = []
     
-    while current_date_jst <= end_date_jst:
+    while current_date_jst <= end_date:
         r1, r2, r3 = get_jma_ten_minutes_data_per_day( station, current_date_jst )
         date_time.extend( r1 )
         pressure_hPa.extend( r2 )
@@ -155,23 +157,22 @@ def get_jma_ten_minutes_data(station, start_date_jst, end_date_jst):
 def convert_ten_minutes_data_to_csv(data):
     station = data.station
     s = f'''
-prec_no         , {station.area.prec_no:02d}
-block_no        , {station.block_no:02d}
-Station name    , {station.name}
-Latitude [deg]  , {station.latitude_deg:8.3f}
-Longitude [deg] , {station.longitude_deg:8.3f}
-Height [m]      , {station.height_m:6.1f}
+prec_no                  , {station.area.prec_no:02d}
+block_no                 , {station.block_no:02d}
+Station name             , {station.name}
+Latitude [deg]           , {station.latitude_deg:8.3f}
+Longitude [deg]          , {station.longitude_deg:8.3f}
+Height [m]               , {station.height_m:6.1f}
 
-Date & Time     , Prs [hPa], Sea Level Prs [hPa]
+Date & Time              , Prs [hPa], Sea Level Prs [hPa]
 '''
     for i, t in enumerate( data.date_time ):
-        datetime_str = t.strftime('%Y-%m-%d %H:%M')
-        s += f'{datetime_str}, {data.pressure_hPa[i]:9.1f}, {data.sea_level_pressure_hPa[i]:9.1f}\n'
+        s += f'{t.isoformat()}, {data.pressure_hPa[i]:9.1f}, {data.sea_level_pressure_hPa[i]:9.1f}\n'
     return s
 
-START_DATE_JST  = datetime( 2022, 1, 15 ) # Analysis start date in Japan Standard Time (inclusive)
-END_DATE_JST    = datetime( 2022, 1, 17 ) # Analysis end date in Japan Standard Time (inclusive)
-DATA_OUTPUT_DIR = Path( 'data' )
+START_DATE      = datetime( 2022, 1, 15, tzinfo = TZ_JST ) # Analysis start date in JST (inclusive)
+END_DATE        = datetime( 2022, 1, 19, tzinfo = TZ_JST ) # Analysis end date in JST (inclusive)
+DATA_OUTPUT_DIR = Path( 'data_jma' )
 
 
 DATA_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
@@ -180,7 +181,7 @@ areas = get_jma_areas()
 for area in areas:
     stations = get_jma_stations( area )
     for station in stations:
-        data = get_jma_ten_minutes_data( station, START_DATE_JST, END_DATE_JST )
+        data = get_jma_ten_minutes_data( station, START_DATE, END_DATE )
         output_file = DATA_OUTPUT_DIR / f'{station.area.prec_no:02d}_{station.block_no:04d}.csv'
         f = open( output_file, 'w', encoding = 'utf-8' )
         f.write( convert_ten_minutes_data_to_csv( data ) )
