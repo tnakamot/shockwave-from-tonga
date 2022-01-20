@@ -198,19 +198,22 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
                 pressure_hPa_diffs.append( matched_record.pressure_hPa_diff )
 
         # Draw estimated wavefront.
-        if shockwave_i == 0:
-            # Expected wavefront distance from Hunga Tonga.
-            distance = geodesic( meters = travel_speed_m_s * ( date_time - eruption_time ).seconds )
-            bearings = np.linspace(-180, 180, 360)
-            wavefront_points = [ distance.destination( point = hunga_tonga_coord, bearing = b ) for b in bearings ]
+        bearings = np.linspace(-180, 180, 360)
+        distance = geodesic( meters = travel_speed_m_s * ( date_time - eruption_time ).total_seconds() )
+        wavefront_points = [ distance.destination( point = hunga_tonga_coord, bearing = b ) for b in bearings ]
 
-            wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
-            wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
+        wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
+        wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
 
-            ax.plot( wavefront_longitude_deg,
-                     wavefront_latitude_deg,
+        div_js = np.where( np.abs( np.diff( wavefront_longitude_deg ) ) > 180 )[0] + 1
+        div_js = np.append( div_js, len( wavefront_longitude_deg ) )
+        div_j_start = 0
+        for div_j_end in div_js:
+            ax.plot( wavefront_longitude_deg[div_j_start:div_j_end],
+                     wavefront_latitude_deg[div_j_start:div_j_end],
                      transform = ccrs.PlateCarree(),
                      color = 'black' )
+            div_j_start = div_j_end
 
         # Generate legend.
         legend_items = []
