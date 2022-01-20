@@ -34,6 +34,7 @@ from pathlib import Path
 from geopy import distance
 from PIL import Image, ImageDraw, ImageFont
 import io
+from scipy import optimize
 
 TZ_JST = timezone( timedelta( hours = +9 ), name = 'JST' ) # Japan Standard Time
 GENERATE_ANIMATION_GIF = True
@@ -136,6 +137,7 @@ START_LATITUDE_DEG  =  24.0
 END_LATITUDE_DEG    =  46.0
 START_LONGITUDE_DEG = 120.0
 END_LONGITUDE_DEG   = 160.0
+
 ax.set_extent( ( START_LONGITUDE_DEG, END_LONGITUDE_DEG,
                  START_LATITUDE_DEG, END_LATITUDE_DEG ),
                ccrs.PlateCarree() )
@@ -168,7 +170,8 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
         longitude_degs = []
         latitude_degs  = []
         pressure_hPa_diffs = []
-    
+
+        # Plot the pressure difference data in the map.
         for matched_record in matched_records:
         
             if isnan( matched_record.pressure_hPa_diff ):
@@ -187,6 +190,22 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
                 latitude_degs.append( matched_record.latitude_deg )
                 pressure_hPa_diffs.append( matched_record.pressure_hPa_diff )
 
+        # Draw estimated wavefront.
+        if shockwave_i == 0:
+            # Expected wavefront distance from Hunga Tonga.
+            distance_m = travel_speed_m_s * ( date_time - eruption_time ).seconds
+            wavefront_latitude_deg  = np.linspace( START_LATITUDE_DEG, END_LATITUDE_DEG, 10 )
+            wavefront_longitude_deg = []
+            for lat_deg in wavefront_latitude_deg:
+                f = lambda lon_deg: distance.distance( hunga_tonga_coord, (lat_deg, lon_deg) ).m - distance_m
+                wavefront_longitude_deg.append( optimize.fsolve( f, kyoto_coord[1] )[0] )
+
+            lines = ax.plot( wavefront_longitude_deg,
+                             wavefront_latitude_deg,
+                             transform = ccrs.PlateCarree(),
+                             color = 'black' )
+
+        # Generate legend.
         legend_items = []
 
         legend_title_lines = [f'{date_time.strftime("%Y-%m-%d %H:%M")} (JST)',
@@ -214,6 +233,8 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
                    title = '\n'.join(legend_title_lines),
                    loc = 'center right' )
 
+        # Save the figure in memory for the animation GIF that will be generated later,
+        # or save it in the disk.
         if GENERATE_ANIMATION_GIF:
             print(f'Internally generated the map at {date_time.strftime("%Y-%m-%d %H:%M (JST)")}.')
             animation_images.append( fig2img( fig ) )
@@ -227,6 +248,12 @@ for shockwave_i, estimated_kyoto_arrival_time in enumerate( estimated_kyoto_arri
             pp = p.pop(0)
             pp.remove()
             del pp
+
+        if lines:
+            ll = lines.pop(0)
+            ll.remove()
+            del ll
+            lines = None
 
     if GENERATE_ANIMATION_GIF:
         # Generate the cover page.
