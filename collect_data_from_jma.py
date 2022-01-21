@@ -20,12 +20,13 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
-import urllib.request
-from bs4 import BeautifulSoup
 import re
+import urllib.request
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from math import nan
+from pathlib import Path
+
+from bs4 import BeautifulSoup
 
 TZ_JST = timezone( timedelta( hours = +9 ), name = 'JST' ) # Japan Standard Time
 
