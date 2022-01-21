@@ -59,6 +59,20 @@ The downloaded data will be saved in `data_jma/` directory as CSV files. Run the
 
 The animation GIFs will be saved in `figure_jma/` directory.
 
+### Wavefront Simulation
+
+The animation below shows the simulated wavefront of the shockwave from Hunga Tonga assuming the travel speed is 310 m/s.
+
+![Wavefront Simulation](figure_wavefront_simulation/wavefront_simulation.gif)
+
+To reproduce this image, run the command below:
+
+```
+ $ python3 wavefront_simulation.py
+```
+
+Edit `travel_speed_m_s` parameter in the python file to change the travel speed.
+
 ## Acknowledgement
 
 Visualization of the barometric pressure difference to see the shockwave was originally done by Weathernews Inc.
