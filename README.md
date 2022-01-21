@@ -24,7 +24,7 @@ The third shockwave came in the same direction as the first one. This is the wav
 
 The barometric pressure data were obtained from [Japan Meteorological Agency](https://www.data.jma.go.jp/obd/stats/etrn/index.php). The good thing about their database is that they monitor the barometric pressure every 10 minutes at major weather stations and preserve them in the database.
 
-To reproduce the same images above, you need Python 3.6 (or above) and the following python modules:
+To reproduce the same images above, you need Python 3.8 (or above) and the following python modules:
 
  * BeautifulSoup (version 4.8.2 or newer)
  * numpy (version 1.1.17.4 or newer)
