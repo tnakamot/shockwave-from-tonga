@@ -26,14 +26,26 @@ The barometric pressure data were obtained from [Japan Meteorological Agency](ht
 
 To reproduce the same images above, you need Python 3.6 (or above) and the following python modules:
 
- * BeautifulSoup (version 4.6.0 or newer)
- * numpy (version 1.19.4 or newer)
- * matplotlib (version 3.3.4 or newer)
- * cartopy (0.19.0.post1 or newer)
- * Pillow (8.4.0 or newer)
- * geopy (2.2.0 or newer)
+ * BeautifulSoup (version 4.8.2 or newer)
+ * numpy (version 1.1.17.4 or newer)
+ * matplotlib (version 3.1.2 or newer)
+ * cartopy (0.17.0 or newer)
+ * geopy (1.20.0 or newer)
+ * Pillow (9.0.0 or newer)
  
-Run the commnad below to download the barometric pressure data from JMA:
+On Ubuntu 20.04, the above packages except Pillow can be obtained through `apt`:
+
+```
+ $ sudo apt install python3 python3-pip python3-bs4 python3-matplotlib python3-cartopy python3-geopy
+```
+
+The Pillow nees to be installed via `pip` to obtain a new version:
+
+```
+ $ python3 -m pip install Pillow
+```
+ 
+Then, run the commnad below to download the barometric pressure data from JMA:
 
 ```
  $ python3 collect_data_from_jma.py

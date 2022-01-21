@@ -21,20 +21,20 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
-import numpy as np
-from datetime import datetime, timezone, timedelta
-from math import nan, isnan
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import matplotlib.lines as mlines
-from matplotlib.font_manager import findfont, FontProperties
+import io
+from datetime import datetime, timedelta, timezone
+from math import isnan, nan
+from pathlib import Path
+
 import cartopy.crs as ccrs
 import cartopy.feature as cfea
-from pathlib import Path
+import matplotlib.cm as cm
+import matplotlib.lines as mlines
+import matplotlib.pyplot as plt
+import numpy as np
 from geopy.distance import geodesic
+from matplotlib.font_manager import FontProperties, findfont
 from PIL import Image, ImageDraw, ImageFont
-import io
-from scipy import optimize
 
 TZ_JST = timezone( timedelta( hours = +9 ), name = 'JST' ) # Japan Standard Time
 GENERATE_ANIMATION_GIF = True
@@ -59,7 +59,7 @@ def read_pressure_data(filename):
 
     for line in lines[9:]:
         fields = [r.strip() for r in line.split(',')]
-        date_time    = datetime.strptime( fields[0][:-3] + fields[0][-2:], '%Y-%m-%dT%H:%M:%S%z')
+        date_time    = datetime.fromisoformat( fields[0] )
         pressure_hPa = float( fields[1] )
         pressure_hPa_diff = pressure_hPa - pressure_hPa_prev
         pressure_hPa_prev = pressure_hPa
