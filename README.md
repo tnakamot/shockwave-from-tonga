@@ -26,6 +26,7 @@ The barometric pressure data were obtained from [Japan Meteorological Agency](ht
 
 To reproduce the same images above, you need Python 3.8 (or above) and the following python modules:
 
+ * tqdm (version 4.30 or newer)
  * BeautifulSoup (version 4.8.2 or newer)
  * numpy (version 1.1.17.4 or newer)
  * matplotlib (version 3.1.2 or newer)
