@@ -55,7 +55,7 @@ Then, run the commnad below to download the barometric pressure data from JMA:
 The downloaded data will be saved in `data_jma/` directory as CSV files. Run the command below to generate maps with the data plot:
 
 ```
- $ python3 draw_map.py
+ $ python3 draw_map_japan.py
 ```
 
 The animation GIFs will be saved in `figure_jma/` directory.

@@ -51,6 +51,12 @@ EARTH_CIRCUMFERENCE = geodesic( HUNGA_TONGA_COORD, ANTIPODE_COORD ) * 2
 #  https://himawari.asia/himawari8-image.htm?sI=D531106&sClC=ffff00&sTA=true&sTAT=TY&sS=6&sNx=3&sNy=2&sL=-169.171875&sT=-426.8125&wW=1920&wH=969&sD=1642219800000
 ERUPTION_TIME       = datetime( 2022, 1, 15, 13, 10, tzinfo = TZ_JST )
 
+def ordinal(i):
+    if 11 <= (i % 100) <= 13:
+        return str(i) + 'th'
+    else:
+        suffix = ['th', 'st', 'nd', 'rd'] + ['th'] * 6
+        return str(i) + suffix[i % 10]
 
 def fig2img(fig):
     '''Convert the given matplotlib Figure into Pillow Image.
