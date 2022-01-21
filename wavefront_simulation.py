@@ -30,33 +30,20 @@ from pathlib import Path
 
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
-import numpy as np
 from geopy.distance import geodesic
 from tqdm import tqdm
 
 from common import *
 
-def draw_wavefront(fig, minutes_from_eruption, travel_speed_m_s):
+def draw_frame(fig, minutes_from_eruption, travel_speed_m_s):
     time_since_eruption = timedelta( minutes = minutes_from_eruption )
     date_time = ERUPTION_TIME + time_since_eruption
-    bearings = np.linspace(-180, 180, 360)
     distance = geodesic( meters = travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds() )
-    wavefront_points = [ distance.destination( point = HUNGA_TONGA_COORD, bearing = b ) for b in bearings ]
 
-    wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
-    wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
+    projection = ccrs.PlateCarree()
 
-    ax = add_world_map( fig, ccrs.PlateCarree() )
-
-    div_js = np.where( np.abs( np.diff( wavefront_longitude_deg ) ) > 180 )[0] + 1
-    div_js = np.append( div_js, len( wavefront_longitude_deg ) )
-    div_j_start = 0
-    for div_j_end in div_js:
-        ax.plot( wavefront_longitude_deg[div_j_start:div_j_end],
-                 wavefront_latitude_deg[div_j_start:div_j_end],
-                 transform = ccrs.PlateCarree(),
-                 color = 'black' )
-        div_j_start = div_j_end
+    ax = add_world_map( fig, projection )
+    draw_wavefront( ax, distance, projection )
 
     hours_since_eruption   = int( time_since_eruption.total_seconds() / 3600 )
     minutes_since_eruption = int( ( time_since_eruption.total_seconds() % 3600 ) / 60 )
@@ -86,7 +73,7 @@ def main():
                               SIMULATION_INTERVAL_MINUTES )
 
     for minutes_from_eruption in tqdm( simulation_range ):
-        draw_wavefront( fig, minutes_from_eruption, TRAVEL_SPEED_M_S )
+        draw_frame( fig, minutes_from_eruption, TRAVEL_SPEED_M_S )
         
         dump_path = OUTPUT_DIR / f'wavefrom_simulation_{minutes_from_eruption:05d}.png'
         

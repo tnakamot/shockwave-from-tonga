@@ -25,6 +25,7 @@ import io
 from datetime import datetime, timedelta, timezone
 
 import cartopy.feature as cfea
+import numpy as np
 from geopy.distance import geodesic
 from geopy.point import Point
 from matplotlib.figure import Figure
@@ -82,6 +83,28 @@ def add_world_map(fig, projection):
     ax.add_feature( cfea.OCEAN, color = OCEAN_COLOR )
     ax.add_feature( cfea.LAND,  color = LAND_COLOR )
     return ax
+
+def draw_wavefront(ax, distance, projection):
+    bearings = np.linspace(-180, 180, 360)
+    wavefront_points = [ distance.destination( point = HUNGA_TONGA_COORD, bearing = b ) for b in bearings ]
+
+    wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
+    wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
+
+    div_js = np.where( np.abs( np.diff( wavefront_longitude_deg ) ) > 180 )[0] + 1
+    div_js = np.append( div_js, len( wavefront_longitude_deg ) )
+    div_j_start = 0
+    lines = []
+    for div_j_end in div_js:
+        line = ax.plot( wavefront_longitude_deg[div_j_start:div_j_end],
+                        wavefront_latitude_deg[div_j_start:div_j_end],
+                        transform = projection,
+                        color = 'black' )
+        lines.append( line )
+        div_j_start = div_j_end
+
+    return lines
+
 
 class AnimationFrame:
     '''Represents one image in the animation data.'''

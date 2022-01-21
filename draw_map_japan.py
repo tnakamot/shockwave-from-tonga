@@ -132,29 +132,19 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
 
         # TODO: move this code to common.py
         # Draw estimated wavefront.
-        bearings = np.linspace(-180, 180, 360)
         distance = geodesic( meters = TRAVEL_SPEED_M_S * ( date_time - ERUPTION_TIME ).total_seconds() )
-        wavefront_points = [ distance.destination( point = HUNGA_TONGA_COORD, bearing = b ) for b in bearings ]
-
-        wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
-        wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
-
-        div_js = np.where( np.abs( np.diff( wavefront_longitude_deg ) ) > 180 )[0] + 1
-        div_js = np.append( div_js, len( wavefront_longitude_deg ) )
-        div_j_start = 0
-        for div_j_end in div_js:
-            ax.plot( wavefront_longitude_deg[div_j_start:div_j_end],
-                     wavefront_latitude_deg[div_j_start:div_j_end],
-                     transform = projection,
-                     color = 'black' )
-            div_j_start = div_j_end
+        lines = draw_wavefront( ax, distance, projection )
 
         # Generate legend.
         legend_items = []
-
         legend_title_lines = [f'{date_time.strftime("%Y-%m-%d %H:%M")} (JST)',
                               'Barometric Pressure Difference',
                               'from 10 Minutes Ago']
+
+        legend_wavefront_line = mlines.Line2D( [], [] )
+        legend_wavefront_line.update_from( lines[0][0] )
+        legend_wavefront_line.set_label( f'Estimated wavefront\n(Propagation speed {TRAVEL_SPEED_M_S:.1f} m/s)' )
+        legend_items.append( legend_wavefront_line )
 
         legend_dps = np.linspace( MAX_PRESSURE_HPA_DIFF, -MAX_PRESSURE_HPA_DIFF, 5 )
         for legend_dp in legend_dps:
