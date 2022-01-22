@@ -66,7 +66,7 @@ The animation GIFs will be saved in `figure_jma/` directory.
 
 The animation below shows the simulated wavefront of the shockwave from Hunga Tonga assuming the travel speed is 300, 305, 310, 315, and 320 m/s.
 
-![Wavefront Simulation](figure_wavefront_simulation/wavefront_simulation_h264.mp4)
+https://user-images.githubusercontent.com/3995187/150633918-a81b4861-b6f1-457d-91fb-c05d861ed9ac.mp4
 
 Run the command below to reproduce this video:
 
