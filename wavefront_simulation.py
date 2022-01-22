@@ -63,7 +63,7 @@ def main():
     OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
     
     SIMULATION_INTERVAL_MINUTES = 10
-    SIMULATION_DURATION_MINUTES = 72 * 60
+    SIMULATION_DURATION_MINUTES = 144 * 60
 
     fig = plt.figure( figsize = (10, 5) )
     dump_mode = True
