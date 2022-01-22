@@ -3,8 +3,7 @@ __pycache__/
 /data_asos1min/
 /figure_jma/*.png
 /figure_wavefront_simulation/dump/
-/figure_wavefront_simulation/wavefront_simulation.mp4
-/figure_wavefront_simulation/wavefront_simulation.gif
+/figure_wavefront_simulation/
 /figure_asos1min/dump/
 \#*
 .#*
