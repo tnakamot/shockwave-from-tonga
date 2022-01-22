@@ -14,7 +14,7 @@ https://user-images.githubusercontent.com/3995187/150635189-fbe12470-f4fd-4d53-a
 
 The second shockwave came from the opposite side. This is the wave that went through the antipode of Tonga ([20°32'09.6"N 4°37'4.8"E, somewhere in South Africa](https://geohack.toolforge.org/geohack.php?params=20.536_N_4.618_E)). The circumference of the Earth is about 40,000 km, so this wave should have traveled approximately (40,000 - 8,000) = 32,000 km. The arrival time of this second shockwave at Kyoto was about January 16, 2022 05:20 PM (JST), which is about 28 hours later than the erruption. This indicates that the propagation speed was about 317 m/s. Note that this is a quick esimation, so may be different from the actual speed.
 
-https://user-images.githubusercontent.com/3995187/150635196-5bfd3966-b4a9-4821-840a-203f47eac349.mp4
+https://user-images.githubusercontent.com/3995187/150635224-97205559-2654-4c3c-9db4-20878a2f1764.mp4
 
 ### Third shockwave from Tonga again
 
