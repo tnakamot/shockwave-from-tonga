@@ -106,10 +106,6 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
     for date_time in tqdm( date_times ):
         ax = draw_japan_map( fig, projection )
         
-        points = []
-        longitude_degs = []
-        latitude_degs  = []
-        pressure_hPa_diffs = []
         matched_records = [ record for record in records if record.date_time == date_time ]
 
         # Plot the pressure difference data in the map.
@@ -124,11 +120,6 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
                      transform = projection,
                      markersize = 5,
                      color = pressure_diff_color_map( matched_record.pressure_hPa_diff ) )
-
-            if not isnan( matched_record.pressure_hPa_diff ):
-                longitude_degs.append( matched_record.longitude_deg )
-                latitude_degs.append( matched_record.latitude_deg )
-                pressure_hPa_diffs.append( matched_record.pressure_hPa_diff )
 
         # TODO: move this code to common.py
         # Draw estimated wavefront.
