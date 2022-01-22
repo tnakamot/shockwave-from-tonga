@@ -32,12 +32,14 @@ To reproduce the same images above, you need Python 3.8 (or above) and the follo
  * matplotlib (version 3.1.2 or newer)
  * cartopy (0.17.0 or newer)
  * geopy (1.20.0 or newer)
+ * OpenCV (4.2.0 or newer)
  * Pillow (9.0.0 or newer)
+
  
 On Ubuntu 20.04, the above packages except Pillow can be obtained through `apt`:
 
 ```
- $ sudo apt install python3 python3-pip python3-bs4 python3-matplotlib python3-cartopy python3-geopy
+ $ sudo apt install python3 python3-pip python3-bs4 python3-matplotlib python3-cartopy python3-geopy python3-opencv
 ```
 
 The Pillow nees to be installed via `pip` to obtain a new version:
@@ -64,15 +66,22 @@ The animation GIFs will be saved in `figure_jma/` directory.
 
 The animation below shows the simulated wavefront of the shockwave from Hunga Tonga assuming the travel speed is 300, 305, 310, 315, and 320 m/s.
 
-![Wavefront Simulation](figure_wavefront_simulation/wavefront_simulation.gif)
+![Wavefront Simulation](figure_wavefront_simulation/wavefront_simulation_h264.mp4)
 
-Run the command below to reproduce this animation:
+Run the command below to reproduce this video:
 
 ```
  $ python3 wavefront_simulation.py
 ```
 
-This script uses `geopy.distance.geodesic()` method to calculate the distance from Hunga Tonga to any points on the Earth. According to the [GeoPy's documentation](https://geopy.readthedocs.io/en/v1/#module-geopy.distance), it uses the method given by [Kerney (2013)](https://doi.org/10.1007%2Fs00190-012-0578-z) and [WGS-84](https://en.wikipedia.org/wiki/World_Geodetic_System) ellipsoidal model.
+This generates `figure_wavefront_simulation/wavefront_simulation.gif` and `figure_wavefront_simulation/wavefront_simulation.mp4`. The MP4 codec used by this script is not the best in terms of file size. To compress the MP4 file further, it is recommended to use H264 encoder. For example, if you are using Ubuntu 20.04, run the commands below to do so:
+
+```
+ $ sudo apt install x264
+ $ x264 -o figure_wavefront_simulation/wavefront_simulation_h264.mp4 figure_wavefront_simulation/wavefront_simulation.mp4
+```
+
+Note that this script uses `geopy.distance.geodesic()` method to calculate the distance from Hunga Tonga to any points on the Earth. According to the [GeoPy's documentation](https://geopy.readthedocs.io/en/v1/#module-geopy.distance), it uses the method given by [Kerney (2013)](https://doi.org/10.1007%2Fs00190-012-0578-z) and [WGS-84](https://en.wikipedia.org/wiki/World_Geodetic_System) ellipsoidal model.
 
 ## Acknowledgement
 

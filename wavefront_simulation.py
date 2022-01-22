@@ -88,6 +88,9 @@ def main():
 
     OUTPUT_DIR = Path( 'figure_wavefront_simulation' )
     OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
+
+    DUMP_PATH = OUTPUT_DIR / 'dump'
+    DUMP_DIR.mkdir( parents = True, exist_ok = True )
     
     SIMULATION_INTERVAL_MINUTES = 10
     SIMULATION_DURATION_MINUTES = 144 * 60
@@ -102,7 +105,7 @@ def main():
     for minutes_from_eruption in tqdm( simulation_range ):
         draw_frame( fig, minutes_from_eruption, wavefront_lines )
         
-        dump_path = OUTPUT_DIR / f'wavefrom_simulation_{minutes_from_eruption:05d}.png'
+        dump_path = DUMP_DIR / f'wavefront_simulation_{minutes_from_eruption:05d}.png'
         
         animation_data.append( fig,
                                duration_ms = 100,
@@ -119,6 +122,11 @@ def main():
     gif_output_filename = OUTPUT_DIR / f'wavefront_simulation.gif'
     animation_data.save_gif( gif_output_filename )
     print( f'Generated {gif_output_filename}' )
+
+    mp4_output_filename = OUTPUT_DIR / f'wavefront_simulation.mp4'
+    animation_data.save_mp4( mp4_output_filename )
+    print( f'Generated {mp4_output_filename}' )
+
 
 if __name__ == "__main__":
     main()

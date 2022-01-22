@@ -25,6 +25,7 @@ import io
 from datetime import datetime, timedelta, timezone
 
 import cartopy.feature as cfea
+import cv2
 import numpy as np
 from geopy.distance import geodesic
 from geopy.point import Point
@@ -152,3 +153,20 @@ class AnimationData:
                               save_all = True,
                               duration = [ frame.duration_ms for frame in frames ],
                               loop = 0 if loop else 1 )
+    def save_mp4(self, path):
+        frames = [self.cover_frame] if self.cover_frame else []
+        frames = frames + self.frames
+
+        one_frame_duration_ms = min( [ frame.duration_ms for frame in frames ] )
+        fps = 1000.0 / one_frame_duration_ms
+
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video = cv2.VideoWriter( str( path ), fourcc, fps, self.frames[0].image.size )
+
+        for frame in frames:
+            cv_image = cv2.cvtColor( np.array( frame.image ), cv2.COLOR_RGB2BGR )
+            
+            for i in range( int( frame.duration_ms / one_frame_duration_ms ) ):
+                video.write( cv_image )
+            
+        video.release()
