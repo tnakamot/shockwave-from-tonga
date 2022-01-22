@@ -36,11 +36,6 @@ from tqdm import tqdm
 
 from common import *
 
-class WavefrontLine:
-    def __init__(self, travel_speed_m_s, color):
-        self.travel_speed_m_s = travel_speed_m_s
-        self.color            = color
-
 def draw_frame(fig, minutes_from_eruption, wavefront_lines):
     projection = ccrs.PlateCarree()
     ax = add_world_map( fig, projection )
@@ -52,9 +47,9 @@ def draw_frame(fig, minutes_from_eruption, wavefront_lines):
     for wavefront_line in wavefront_lines:
         distance_m = wavefront_line.travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds()
         lines = draw_wavefront( ax,
-                                distance   = geodesic( meters = distance_m ),
-                                projection = projection,
-                                color      = wavefront_line.color )
+                                distance       = geodesic( meters = distance_m ),
+                                projection     = projection,
+                                wavefront_line = wavefront_line )
 
         legend_wavefront_line = mlines.Line2D( [], [] )
         legend_wavefront_line.update_from( lines[0][0] )
@@ -89,7 +84,7 @@ def main():
     OUTPUT_DIR = Path( 'figure_wavefront_simulation' )
     OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
 
-    DUMP_PATH = OUTPUT_DIR / 'dump'
+    DUMP_DIR = OUTPUT_DIR / 'dump'
     DUMP_DIR.mkdir( parents = True, exist_ok = True )
     
     SIMULATION_INTERVAL_MINUTES = 10
