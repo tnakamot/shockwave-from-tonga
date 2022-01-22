@@ -1,7 +1,7 @@
 __pycache__/
 /data_jma/
 /data_asos1min/
-/figure_jma/*.png
+/figure_jma/
 /figure_wavefront_simulation/dump/
 /figure_wavefront_simulation/
 /figure_asos1min/dump/

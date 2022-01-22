@@ -88,6 +88,10 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
     FIG_OUTPUT_DIR = Path( 'figure_jma' )
     FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
 
+    DUMP_DIR = FIG_OUTPUT_DIR / 'dump'
+    DUMP_DIR.mkdir( parents = True, exist_ok = True )
+
+
     wavefront_lines = [
         WavefrontLine( travel_speed_m_s = 320, color = '#000000' ),
         WavefrontLine( travel_speed_m_s = 315, color = '#FF00BF' ),
@@ -171,7 +175,7 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
                    fontsize = 'x-small' )
 
         date_time_str = date_time.strftime('%Y%m%d_%H%M')
-        fig_output_filename = FIG_OUTPUT_DIR / f'{date_time_str}.png'
+        fig_output_filename = DUMP_DIR / f'{date_time_str}.png'
         
         animation_data.append( fig,
                                duration_ms = 200,
@@ -185,9 +189,14 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
     animation_data.add_cover( text = f'{ordinal( shockwave_i + 1 )} shockwave from Hunga Tonga',
                               fontsize = 24,
                               duration_ms = 2000 )
-    gif_output_filename = FIG_OUTPUT_DIR / f'shockwave_{shockwave_i}.gif'
+    gif_output_filename = FIG_OUTPUT_DIR / f'japan_map_with_shockwave_{shockwave_i}.gif'
     animation_data.save_gif( gif_output_filename )
     tqdm.write( f'Generated {gif_output_filename}' )
+
+    mp4_output_filename = FIG_OUTPUT_DIR / f'japan_map_with_shockwave_{shockwave_i}.mp4'
+    animation_data.save_mp4( mp4_output_filename )
+    tqdm.write( f'Generated {mp4_output_filename}' )
+
 
 def estimate_kyoto_arrival_times():
     KYOTO_COORD = Point( latitude  = 35.011611,
