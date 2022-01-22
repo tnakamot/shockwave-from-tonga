@@ -38,11 +38,6 @@ from tqdm import tqdm
 
 from common import *
 
-
-# Estimated travel speed of shockwave.
-#  TODO: Justify why it is slower than the speed of sound at 1 atm, 15 deg C (340.5 m/s)
-TRAVEL_SPEED_M_S = 310 # [m/s]
-
 class PressureData:
     def __init__(self, latitude_deg, longitude_deg, date_time, pressure_hPa, pressure_hPa_diff):
         self.latitude_deg  = latitude_deg
@@ -92,6 +87,15 @@ def draw_japan_map(fig, projection):
 def generate_animation(fig, shockwave_i, start_time, end_time, records):
     FIG_OUTPUT_DIR = Path( 'figure_jma' )
     FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
+
+    wavefront_lines = [
+        WavefrontLine( travel_speed_m_s = 320, color = '#000000' ),
+        WavefrontLine( travel_speed_m_s = 315, color = '#FF00BF' ),
+        WavefrontLine( travel_speed_m_s = 310, color = '#8000FF' ),
+        WavefrontLine( travel_speed_m_s = 305, color = '#FFBF00' ),
+        WavefrontLine( travel_speed_m_s = 300, color = '#FF0000' ),
+    ]
+
     
     MAX_PRESSURE_HPA_DIFF = 0.5
     pressure_diff_color_map = lambda dp: cm.rainbow( dp / MAX_PRESSURE_HPA_DIFF / 2.0 + 0.5 )
@@ -121,10 +125,19 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
                      markersize = 5,
                      color = pressure_diff_color_map( matched_record.pressure_hPa_diff ) )
 
-        # TODO: move this code to common.py
         # Draw estimated wavefront.
-        distance = geodesic( meters = TRAVEL_SPEED_M_S * ( date_time - ERUPTION_TIME ).total_seconds() )
-        lines = draw_wavefront( ax, distance, projection )
+        legend_wavefront_lines = []
+        for wavefront_line in wavefront_lines:
+            distance_m = wavefront_line.travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds()
+            lines = draw_wavefront( ax,
+                                    distance       = geodesic( meters = distance_m ),
+                                    projection     = projection,
+                                    wavefront_line = wavefront_line )
+            
+            legend_wavefront_line = mlines.Line2D( [], [] )
+            legend_wavefront_line.update_from( lines[0][0] )
+            legend_wavefront_line.set_label( f'Estimated wavefront ({wavefront_line.travel_speed_m_s:d} m/s)' )
+            legend_wavefront_lines.append( legend_wavefront_line )
 
         # Generate legend.
         legend_items = []
@@ -132,10 +145,8 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
                               'Barometric Pressure Difference',
                               'from 10 Minutes Ago']
 
-        legend_wavefront_line = mlines.Line2D( [], [] )
-        legend_wavefront_line.update_from( lines[0][0] )
-        legend_wavefront_line.set_label( f'Estimated wavefront\n(Propagation speed {TRAVEL_SPEED_M_S:.1f} m/s)' )
-        legend_items.append( legend_wavefront_line )
+        for legend_wavefront_line in legend_wavefront_lines:
+            legend_items.append( legend_wavefront_line )
 
         legend_dps = np.linspace( MAX_PRESSURE_HPA_DIFF, -MAX_PRESSURE_HPA_DIFF, 5 )
         for legend_dp in legend_dps:
@@ -156,7 +167,8 @@ def generate_animation(fig, shockwave_i, start_time, end_time, records):
 
         ax.legend( handles = legend_items,
                    title = '\n'.join(legend_title_lines),
-                   loc = 'center right' )
+                   loc = 'center right',
+                   fontsize = 'x-small' )
 
         date_time_str = date_time.strftime('%Y%m%d_%H%M')
         fig_output_filename = FIG_OUTPUT_DIR / f'{date_time_str}.png'
@@ -181,6 +193,9 @@ def estimate_kyoto_arrival_times():
     KYOTO_COORD = Point( latitude  = 35.011611,
                          longitude = 135.768111 )
     HUNGA_TONGA_TO_KYOTO = geodesic( HUNGA_TONGA_COORD, KYOTO_COORD )
+
+    # Roughly estimated travel speed of shockwave.
+    TRAVEL_SPEED_M_S = 310 # [m/s]
 
     # Travel distance of the 1st, 2nd, 3rd, 4th and 5th shockwaves.
     travel_distances = [
