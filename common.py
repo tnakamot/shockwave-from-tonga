@@ -84,7 +84,7 @@ def add_world_map(fig, projection):
     ax.add_feature( cfea.LAND,  color = LAND_COLOR )
     return ax
 
-def draw_wavefront(ax, distance, projection):
+def draw_wavefront(ax, distance, projection, color = 'black'):
     bearings = np.linspace(-180, 180, 360)
     wavefront_points = [ distance.destination( point = HUNGA_TONGA_COORD, bearing = b ) for b in bearings ]
 
@@ -99,7 +99,7 @@ def draw_wavefront(ax, distance, projection):
         line = ax.plot( wavefront_longitude_deg[div_j_start:div_j_end],
                         wavefront_latitude_deg[div_j_start:div_j_end],
                         transform = projection,
-                        color = 'black' )
+                        color = color )
         lines.append( line )
         div_j_start = div_j_end
 

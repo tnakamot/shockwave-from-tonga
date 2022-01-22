@@ -29,35 +29,62 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import cartopy.crs as ccrs
+import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 from geopy.distance import geodesic
 from tqdm import tqdm
 
 from common import *
 
-def draw_frame(fig, minutes_from_eruption, travel_speed_m_s):
+class WavefrontLine:
+    def __init__(self, travel_speed_m_s, color):
+        self.travel_speed_m_s = travel_speed_m_s
+        self.color            = color
+
+def draw_frame(fig, minutes_from_eruption, wavefront_lines):
+    projection = ccrs.PlateCarree()
+    ax = add_world_map( fig, projection )
+    
     time_since_eruption = timedelta( minutes = minutes_from_eruption )
     date_time = ERUPTION_TIME + time_since_eruption
-    distance = geodesic( meters = travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds() )
+    legend_items = []
 
-    projection = ccrs.PlateCarree()
+    for wavefront_line in wavefront_lines:
+        distance_m = wavefront_line.travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds()
+        lines = draw_wavefront( ax,
+                                distance   = geodesic( meters = distance_m ),
+                                projection = projection,
+                                color      = wavefront_line.color )
 
-    ax = add_world_map( fig, projection )
-    draw_wavefront( ax, distance, projection )
+        legend_wavefront_line = mlines.Line2D( [], [] )
+        legend_wavefront_line.update_from( lines[0][0] )
+        legend_wavefront_line.set_label( f'Speed = {wavefront_line.travel_speed_m_s:d} m/s' )
+        legend_items.append( legend_wavefront_line )
 
+    # Draw legend
+    ax.legend( handles = legend_items,
+               loc = 'upper left',
+               fontsize = 'x-small' )
+        
+    # Set title
     hours_since_eruption   = int( time_since_eruption.total_seconds() / 3600 )
     minutes_since_eruption = int( ( time_since_eruption.total_seconds() % 3600 ) / 60 )
         
     title  = 'Estimated wavefront from Hunga Tonga\n'
-    title += f'{hours_since_eruption:3d}:{minutes_since_eruption:02d} since the eruption'
-    title += '[' + date_time.astimezone( timezone.utc ).strftime('%Y-%m-%d %H:%M:%S (UTC)') + ']\n'
-    title += f'(Assumed travel speed = {travel_speed_m_s:.1f} m/s)'
+    title += f'{hours_since_eruption:3d}:{minutes_since_eruption:02d} since the eruption '
+    title += '[' + date_time.astimezone( timezone.utc ).strftime('%Y-%m-%d %H:%M:%S (UTC)') + ']'
     ax.set_title( title )
 
 
+
 def main():
-    # Estimated travel speed of shock wave to draw.
-    TRAVEL_SPEED_M_S = 310 # [m/s]
+    wavefront_lines = [
+        WavefrontLine( travel_speed_m_s = 320, color = '#000000' ),
+        WavefrontLine( travel_speed_m_s = 315, color = '#FF00BF' ),
+        WavefrontLine( travel_speed_m_s = 310, color = '#8000FF' ),
+        WavefrontLine( travel_speed_m_s = 305, color = '#FFBF00' ),
+        WavefrontLine( travel_speed_m_s = 300, color = '#FF0000' ),
+    ]
 
     OUTPUT_DIR = Path( 'figure_wavefront_simulation' )
     OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
@@ -73,7 +100,7 @@ def main():
                               SIMULATION_INTERVAL_MINUTES )
 
     for minutes_from_eruption in tqdm( simulation_range ):
-        draw_frame( fig, minutes_from_eruption, TRAVEL_SPEED_M_S )
+        draw_frame( fig, minutes_from_eruption, wavefront_lines )
         
         dump_path = OUTPUT_DIR / f'wavefrom_simulation_{minutes_from_eruption:05d}.png'
         

@@ -62,17 +62,17 @@ The animation GIFs will be saved in `figure_jma/` directory.
 
 ### Wavefront Simulation
 
-The animation below shows the simulated wavefront of the shockwave from Hunga Tonga assuming the travel speed is 310 m/s.
+The animation below shows the simulated wavefront of the shockwave from Hunga Tonga assuming the travel speed is 300, 305, 310, 315, and 320 m/s.
 
 ![Wavefront Simulation](figure_wavefront_simulation/wavefront_simulation.gif)
 
-To reproduce this image, run the command below:
+Run the command below to reproduce this animation:
 
 ```
  $ python3 wavefront_simulation.py
 ```
 
-Edit `travel_speed_m_s` parameter in the python file to change the travel speed.
+This script uses `geopy.distance.geodesic()` method to calculate the distance from Hunga Tonga to any points on the Earth. According to the [GeoPy's documentation](https://geopy.readthedocs.io/en/v1/#module-geopy.distance), it uses the method given by [Kerney (2013)](https://doi.org/10.1007%2Fs00190-012-0578-z) and [WGS-84](https://en.wikipedia.org/wiki/World_Geodetic_System) ellipsoidal model.
 
 ## Acknowledgement
 
