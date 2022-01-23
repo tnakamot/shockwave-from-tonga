@@ -243,7 +243,6 @@ ORDER BY
         interp_minutes = np.arange( start_minutes, end_minutes, 1 )
         interp_pressure_hPas = np.interp( interp_minutes, minutes, pressure_hPas )
 
-        # TODO: apply high pass filter
         filtered_pressure_hPas = np.convolve( interp_pressure_hPas, filter_weight, 'same' )
 
         filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
