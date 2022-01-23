@@ -25,7 +25,7 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from math import isnan, nan
+from math import ceil
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -249,7 +249,8 @@ ORDER BY
                   label = 'Pressure difference from 1 minute ago [hPa]' )
     ax.set_title( title )
 
-    fig.savefig( output_filename )
+    fig.savefig( output_filename, bbox_inches = 'tight', pad_inches = 0.05 )
+    return fig2img( fig )
 
 def estimate_la_arrival_times():
     LA_COORD = Point( latitude  = 34.05,
@@ -275,7 +276,7 @@ def estimate_la_arrival_times():
     TRAVEL_SPEED_M_S_TO_EAST = 320 # [m/s]
 
     # Estaimted travel speed of shockwave westwards.
-    TRAVEL_SPEED_M_S_TO_WEST = 307 # [m/s]
+    TRAVEL_SPEED_M_S_TO_WEST = 310 # [m/s]
 
     # Estimated arrival time of the shockwaves at Log Angeles.
     estimated_la_arrival_times = []
@@ -318,8 +319,8 @@ def generate_shockwave_parameters(shockwave_num):
             start_time = estimated_la_arrival_time - timedelta( hours = 0.5 )
             end_time   = estimated_la_arrival_time + timedelta( hours = 7.5 )
         else:
-            start_time = estimated_la_arrival_time - timedelta( hours = 5.5 )
-            end_time   = estimated_la_arrival_time + timedelta( hours = 2.5 )
+            start_time = estimated_la_arrival_time - timedelta( hours = 4.5 )
+            end_time   = estimated_la_arrival_time + timedelta( hours = 3.5 )
 
         param = ShockwaveParameter( shockwave_i = shockwave_i,
                                     start_time  = start_time,
@@ -340,23 +341,55 @@ def process_one_shockwave( shockwave_param ):
     title  = f'{ordinal(shockwave_param.shockwave_i+1)} shockwave from Hunga Tonga\n'
     title +=  'US ASOS one minute interval pressure data'
 
-    generate_time_distance_scatter_plot( sqlite3_connection = sqlite3_connection,
-                                         output_filename    = time_distance_filepath,
-                                         start_time         = shockwave_param.start_time,
-                                         end_time           = shockwave_param.end_time,
-                                         pressure_diff_max_hPa_minute = shockwave_param.pressure_diff_max_hPa_minute,
-                                         pressure_diff_min_hPa_minute = shockwave_param.pressure_diff_min_hPa_minute,
-                                         title           = title )
+    img = generate_time_distance_scatter_plot( sqlite3_connection = sqlite3_connection,
+                                               output_filename    = time_distance_filepath,
+                                               start_time         = shockwave_param.start_time,
+                                               end_time           = shockwave_param.end_time,
+                                               pressure_diff_max_hPa_minute = shockwave_param.pressure_diff_max_hPa_minute,
+                                               pressure_diff_min_hPa_minute = shockwave_param.pressure_diff_min_hPa_minute,
+                                               title           = title )
     tqdm.write( f'Generated {time_distance_filepath}' )
 
-    return 0
+    return img
+
+def combine_images(images, padding = 10, portrait = True):
+    one_width  = max( image.width  for image in images )
+    one_height = min( image.height for image in images )
+
+    if portrait:
+        combined_width  = one_width * 2 + padding * 3
+        combined_height = ( one_height + padding ) * ceil( len(images) / 2) + padding
+    else:
+        combined_width  = ( one_width + padding ) * ceil( len(images) / 2) + padding
+        combined_height = one_height * 2 + padding * 3
+
+    combined_image  = Image.new( 'RGB', ( combined_width, combined_height ), 'white' )
+    for image_i in range( len(images) ):
+        if portrait:
+            x = ( one_width + padding )  * ( image_i % 2 ) + padding
+            y = ( one_height + padding ) * int( image_i / 2 ) + padding
+        else:
+            x = ( one_width + padding )  * int( image_i / 2 ) + padding
+            y = ( one_height + padding ) * ( image_i % 2 ) + padding
+        
+        combined_image.paste( images[ image_i ], (x, y) )
+
+    return combined_image
 
 def main():
-    shockwave_params = generate_shockwave_parameters( 8 )
+    shockwave_nums   = 8
+    shockwave_params = generate_shockwave_parameters( shockwave_nums )
 
     pool = Pool( processes = len( os.sched_getaffinity(0) ) )
-    ret = list( tqdm( pool.imap( process_one_shockwave, shockwave_params ),
-                      total = len( shockwave_params ) ) )
+    time_distance_images = list( tqdm( pool.imap( process_one_shockwave, shockwave_params ),
+                                       total = len( shockwave_params ) ) )
+
+    # Generate combined time vs distance image.
+    combined_time_distance_image = combine_images( time_distance_images, padding = 10, portrait = False )
+    FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
+    combined_time_distance_filepath = FIG_OUTPUT_DIR / 'time_distance_shockwaves.png'
+    combined_time_distance_image.save( combined_time_distance_filepath )
+    print( f'Generated {combined_time_distance_filepath}' )
 
     # Move the code below
         
