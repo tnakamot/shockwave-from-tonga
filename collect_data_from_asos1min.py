@@ -31,9 +31,13 @@ from math import nan
 from pathlib import Path
 
 from bs4 import BeautifulSoup
+from geopy.distance import geodesic
+from influxdb import InfluxDBClient
 from tqdm import tqdm
 
 from common import *
+
+INFLUX_DB_MEASUREMENT = 'asos1min' # This must match the one in plot_asos1min.py
 
 class AsosStation:
     '''This class represents one ASOS station.'''
@@ -45,15 +49,14 @@ class AsosStation:
         self.latitude_deg  = latitude_deg
         self.longitude_deg = longitude_deg
         self.elevation_m   = elevation_m
+        self.distance_km   = geodesic( HUNGA_TONGA_COORD, ( latitude_deg, longitude_deg ) ).km
 
 class AsosRecord:
     '''One record in the data from an ASOS station.'''
 
-    def __init__(self, date_time, sensor1_inch, sensor2_inch, sensor3_inch):
+    def __init__(self, date_time, pressure_hPa):
         self.date_time    = date_time
-        self.sensor1_inch = sensor1_inch
-        self.sensor2_inch = sensor2_inch
-        self.sensor3_inch = sensor3_inch
+        self.pressure_hPa = pressure_hPa
         
 def get_asos1min_station_identifiers():
     '''This function obtains a list of ASOS station identifiers in the ASOS1MIN network.
@@ -150,7 +153,7 @@ def get_asos1min_records(station, start_date_time, end_date_time):
         'day2'     : end_utc.day,
         'hour2'    : end_utc.hour,
         'minute2'  : end_utc.minute,
-        'vars[]'   : ['pres1', 'pres2', 'pres3'],
+        'vars[]'   : ['pres1'],
         'sample'   : '1min',
         'what'     : 'download',
         'delim'    : 'comma',
@@ -175,11 +178,13 @@ def get_asos1min_records(station, start_date_time, end_date_time):
         date_time = datetime( date_time.year, date_time.month,  date_time.day,
                               date_time.hour, date_time.minute, tzinfo = timezone.utc )
 
-        pres1 = float(row['pres1']) if row['pres1'] else nan
-        pres2 = float(row['pres2']) if row['pres2'] else nan
-        pres3 = float(row['pres3']) if row['pres3'] else nan
-
-        records.append( AsosRecord( date_time, pres1, pres2, pres3 ) )
+        if not row['pres1']:
+            continue
+        
+        pres1_inchHg = float(row['pres1'])
+        pres1_hPa    = pres1_inchHg * 33.863886666667
+        
+        records.append( AsosRecord( date_time, pres1_hPa ) )
 
     return records
 
@@ -208,13 +213,29 @@ Latitude [deg]           , {station.latitude_deg}
 Longitude [deg]          , {station.longitude_deg}
 Elevation [m]            , {station.elevation_m}
 
-Date & Time              , Prs1 [inch], Prs2 [inch], Prs3 [inch]
+Date & Time              , Prs [inch]
 '''
     
     for record in records:
-        s += f'{record.date_time.isoformat()}, {record.sensor1_inch:11.6f}, {record.sensor2_inch:11.6f}, {record.sensor3_inch:11.6f}\n'
+        s += f'{record.date_time.isoformat()}, {record.sensor1_inch:11.6f}\n'
         
     return s
+
+def record_to_influxdb_point(station, record):
+    return {
+        'measurement': INFLUX_DB_MEASUREMENT,
+        'tags': {
+            'station_id'   : station.identifier,
+            'latitude_deg' : station.latitude_deg,
+            'longitude_deg': station.longitude_deg,
+            'distance_km'  : station.distance_km,
+        },
+        "time": record.date_time,
+        "fields": {
+            'pressure_hPa': record.pressure_hPa
+        }
+    }
+    pass
 
 def main():
     '''Main function'''
@@ -225,22 +246,41 @@ def main():
 
     DATA_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
 
+    print( f'Connecting InfluxDB on {INFLUX_DB_HOST}:{INFLUX_DB_PORT} ...' )
+    influx_client = InfluxDBClient( INFLUX_DB_HOST , INFLUX_DB_PORT )
+    
+    print( f'Creating InfluxDB database "{INFLUX_DB_NAME}" ...' )
+    influx_client.create_database( INFLUX_DB_NAME )
+    influx_client.switch_database( INFLUX_DB_NAME )
+
     print( 'Obtaining a list of ASOS stations in the ASOS1MIN network... ', end='', flush=True )
     station_identifiers = get_asos1min_station_identifiers()
     print( f'{len(station_identifiers)} ASOS stations were found.\n' )
+
+    total_records = 0
     
     for station_identifier in tqdm( station_identifiers ):
         tqdm.write( f'Downloading data of ASOS station {station_identifier}... ', end = '' )
         station = get_asos_station( station_identifier )
         records = get_asos1min_records( station, START_TIME, END_TIME )
-        csv_str = convert_asos_records_to_csv(station, records)
+        total_records += len( records )
+        
+        influx_client.write_points( [ record_to_influxdb_point( station, record)
+                                      for record in records ] )
 
-        output_file = DATA_OUTPUT_DIR / f'{station.identifier}.csv'
-        f = open( output_file, 'w', encoding = 'utf-8' )
-        f.write( csv_str )
-        f.close()
+        tqdm.write( f'imported { len( records ) } data points into InfluxDB (measurement = { INFLUX_DB_MEASUREMENT })' )
 
-        tqdm.write( f'saved in {output_file}' )
+        # Do not use CSV file anymore.
+        #
+        # csv_str = convert_asos_records_to_csv(station, records)
+        # output_file = DATA_OUTPUT_DIR / f'{station.identifier}.csv'
+        # f = open( output_file, 'w', encoding = 'utf-8' )
+        # f.write( csv_str )
+        # f.close()
+
+        # tqdm.write( f'saved in {output_file}' )
+
+    tqdm.write( f'Imported { total_records } data points in total into InfluxDB (measurement = { INFLUX_DB_MEASUREMENT })' )
     
 if __name__ == "__main__":
     main()
