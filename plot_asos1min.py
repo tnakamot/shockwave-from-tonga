@@ -220,13 +220,12 @@ ORDER BY
             current_timestamp    = datetime.fromisoformat( row[0] )
             current_pressure_hPa = row[1]
 
+            seconds_since_eruption = ( current_timestamp - ERUPTION_TIME ).total_seconds()
+            minutes.append( seconds_since_eruption / 60 )
+            pressure_hPas.append( current_pressure_hPa )
+
             if previous_timestamp and \
                ( ( current_timestamp - previous_timestamp ) == timedelta( minutes = 1 ) ) :
-                seconds_since_eruption = ( current_timestamp - ERUPTION_TIME ).total_seconds()
-                
-                minutes.append( seconds_since_eruption / 60 )
-                pressure_hPas.append( current_pressure_hPa )
-
                 hours_since_eruption.append( seconds_since_eruption / 3600 )
                 pressure_diff_hPa_minute.append( current_pressure_hPa - previous_pressure_hPa )
                 distance_km.append( station_distance_km[ station_id ] )
