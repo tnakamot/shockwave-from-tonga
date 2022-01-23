@@ -160,12 +160,7 @@ def generate_time_distance_scatter_plot(sqlite3_connection,
                                         pressure_diff_min_hPa_minute):
 
     MIN_DISTANCE_KM = 8000
-    filter_weight = firwin( numtaps   = 151,
-                            cutoff    = [0.03, 0.2],
-                            window    = 'hamming',
-                            pass_zero = 'bandpass',
-                            fs        = 1.0 )
-
+    
     cursor = sqlite3_connection.cursor()
     cursor.execute( f'''
 SELECT
@@ -247,6 +242,11 @@ ORDER BY
 
         # High-pass filter
         #
+        # filter_weight = firwin( numtaps   = 151,
+        #                         cutoff    = [0.03, 0.2],
+        #                         window    = 'hamming',
+        #                         pass_zero = 'bandpass',
+        #                         fs        = 1.0 )
         # filtered_pressure_hPas = np.convolve( interp_pressure_hPas, filter_weight, 'same' )
         # filtered_pressure_diff_hPa_minute.extend( np.diff( filtered_pressure_hPas ) )
         # filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
@@ -270,8 +270,10 @@ ORDER BY
         distance_km_for_line.append( station_distance_km[ station_id ] )
         peak_hour_for_line.append( interp_minutes[ np.argmax( envelope ) ] / 60 )
 
-    p_fitted = np.polyfit( peak_hour_for_line, distance_km_for_line, 1 )
-    distance_km_for_fitted_line = np.poly1d( p_fitted )
+    p_fitted = np.polyfit( distance_km_for_line, peak_hour_for_line, 1 )
+    peak_hour_for_fitted_line = np.poly1d( p_fitted )
+    estimated_travel_speed_m_s = 1.0 / p_fitted[0] * 1000.0 / 3600.0
+    print(shockwave_i+1, estimated_travel_speed_m_s)
 
     min_hours = np.min( hours_since_eruption )
     max_hours = np.max( hours_since_eruption )
@@ -294,8 +296,14 @@ ORDER BY
                          vmax = vmax,
                          s = 1 )
         if filtered:
-            ax.plot( peak_hour_for_line, distance_km_for_fitted_line( peak_hour_for_line ),
-                     color = 'black', linestyle = '-', linewidth = 3 )
+            ax.plot( peak_hour_for_fitted_line( distance_km_for_line ),
+                     distance_km_for_line,
+                     color = 'black', linestyle = '-', linewidth = 1 )
+            ax.text( 0.5, 0.5,
+                     f'Estimated travel speed\n{estimated_travel_speed_m_s:.1f} m/s',
+                     horizontalalignment = 'left',
+                     verticalalignment = 'center',
+                     transform = ax.transAxes )
 
         ax.set_xlabel( 'Time since eruption [hours]' )
         ax.set_xlim( min_hours, max_hours )
