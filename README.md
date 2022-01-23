@@ -26,31 +26,45 @@ https://user-images.githubusercontent.com/3995187/150635208-0dd96962-379c-4251-9
 
 ## How To
 
-If you want to reproduce the same vidoes above, you need Python 3.8 (or above) and the following python modules:
+If you want to reproduce the same videos above, follow the instructions below.
 
- * tqdm (version 4.30 or newer)
- * BeautifulSoup (version 4.8.2 or newer)
- * numpy (version 1.1.17.4 or newer)
- * matplotlib (version 3.1.2 or newer)
- * cartopy (0.17.0 or newer)
- * geopy (1.20.0 or newer)
- * OpenCV (4.2.0 or newer)
- * Pillow (9.0.0 or newer)
+### Prerequisite
 
+You need the following software packages on your machine:
+
+ * Python 3.8
+ * InlufxDB 1.6.4
+ * OpenCV 4.2.0 and its python binding
  
-On Ubuntu 20.04, the above packages except Pillow can be obtained through the `apt` command:
+In addition, you need the following python modules.
+
+ * tqdm 4.30.0
+ * BeautifulSoup 4.8.2
+ * numpy 1.17.4
+ * matplotlib 3.1.2
+ * cartopy 0.17.0
+ * geopy 1.20.0
+ * influxdb 5.2.0
+ * Pillow 9.0.0
+
+The versions above are the ones that the author is using. You may use other versions, but they may not work.
+ 
+On Ubuntu 20.04, you can install the above packages except Pillow the `apt` command:
 
 ```
- $ sudo apt install python3 python3-pip python3-bs4 python3-matplotlib python3-cartopy python3-geopy python3-opencv
+ $ sudo apt install python3 influxdb python3-influxdb python3-opencv python3-tqdm python3-bs4 python3-numpy python3-matplotlib python3-cartopy python3-geopy
 ```
 
-The Pillow needs to be installed via `pip` to obtain the latest version:
+Then, you need to install Pillow with the commands below:
 
 ```
+ $ sudo apt install python3-pip
  $ python3 -m pip install Pillow
 ```
- 
-Then, run the commnad below to download the barometric pressure data from JMA:
+
+### Pressure Data in Japan
+
+To reproduce the videos of the pressure data over the map of Japan, run the commnad below to download the barometric pressure data from JMA:
 
 ```
  $ python3 collect_data_from_jma.py
@@ -93,3 +107,7 @@ Visualization of the barometric pressure difference to see the shockwave was ori
  * [トンガ火山噴火による衝撃波が地球1周して再来か　今朝も各地で気圧変化](https://weathernews.jp/s/topics/202201/170085/)
 
 They have used their own measurement instruments while I am using data from Japan Meteorological Agency.
+
+## TODO
+
+ * Write about how to visualize ASOS1MIN network data.
