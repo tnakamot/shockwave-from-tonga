@@ -6,6 +6,7 @@ __pycache__/
 /figure_wavefront_simulation/
 /figure_asos1min/dump/
 /figure_asos1min/time_distance_shockwave_?.png
+/figure_asos1min/filtered_time_distance_shockwave_?.png
 \#*
 .#*
 *.sqlite3

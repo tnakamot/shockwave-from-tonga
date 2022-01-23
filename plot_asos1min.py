@@ -152,12 +152,11 @@ def generate_animation(fig,
     tqdm.write( f'Generated {gif_output_filepath}' )
 
 def generate_time_distance_scatter_plot(sqlite3_connection,
-                                        output_filename,
+                                        shockwave_i,
                                         start_time,
                                         end_time,
                                         pressure_diff_max_hPa_minute,
-                                        pressure_diff_min_hPa_minute,
-                                        title):
+                                        pressure_diff_min_hPa_minute):
 
     MIN_DISTANCE_KM = 8000
 
@@ -185,6 +184,10 @@ ORDER BY
     distance_km = []
     pressure_diff_hPa_minute = []
 
+    filtered_hours_since_eruption = []
+    filtered_distance_km = []
+    filtered_pressure_diff_hPa_minute = []
+    
     for station_id in station_ids:
         cursor.execute( f'''
 SELECT
@@ -202,55 +205,96 @@ ORDER BY
           start_time.astimezone( timezone.utc ),
           end_time.astimezone( timezone.utc ) ) )
 
+        minutes = []
+        pressure_hPas = []
+
         previous_timestamp = None
         previous_pressure_hPa = None
         for row in cursor.fetchall():
             current_timestamp    = datetime.fromisoformat( row[0] )
             current_pressure_hPa = row[1]
 
-            if previous_timestamp:
-            # if previous_timestamp and \
-            #    ( ( current_timestamp - previous_timestamp ) == timedelta( minutes = 1 ) ) :
+            if previous_timestamp and \
+               ( ( current_timestamp - previous_timestamp ) == timedelta( minutes = 1 ) ) :
+                seconds_since_eruption = ( current_timestamp - ERUPTION_TIME ).total_seconds()
+                
+                minutes.append( seconds_since_eruption / 60 )
+                pressure_hPas.append( current_pressure_hPa )
 
-                hours_since_eruption.append( ( current_timestamp - ERUPTION_TIME ).total_seconds() / 3600 )
+                hours_since_eruption.append( seconds_since_eruption / 3600 )
                 pressure_diff_hPa_minute.append( current_pressure_hPa - previous_pressure_hPa )
                 distance_km.append( station_distance_km[ station_id ] )
                 
             previous_timestamp    = current_timestamp
             previous_pressure_hPa = current_pressure_hPa
 
+        # High-pass filter
+        if not minutes:
+            continue
+        
+        start_minutes  = ( start_time - ERUPTION_TIME ).total_seconds() / 60
+        end_minutes    = ( end_time - ERUPTION_TIME ).total_seconds() / 60
+        interp_minutes = np.arange( start_minutes, end_minutes, 1 )
+        interp_pressure_hPas = np.interp( interp_minutes, minutes, pressure_hPas )
+
+        # TODO: apply high pass filter
+
+        filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
+        filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
+        interp_pressure_diff_hPa_minute = np.diff( interp_pressure_hPas )
+        filtered_pressure_diff_hPa_minute.extend( interp_pressure_diff_hPa_minute )
+
     min_hours = np.min( hours_since_eruption )
     max_hours = np.max( hours_since_eruption )
     min_distance_km = np.min( distance_km )
     max_distance_km = np.max( distance_km )
-    
+
+    images = {}
     fig = plt.figure()
-    ax = fig.add_subplot( 1, 1, 1 )
-    im = ax.scatter( hours_since_eruption,
-                     distance_km,
-                     c = pressure_diff_hPa_minute,
-                     cmap = cm.rainbow,
-                     linewidth = 0,
-                     vmin = pressure_diff_min_hPa_minute,
-                     vmax = pressure_diff_max_hPa_minute,
-                     s = 1 )
+    for filtered in [False, True]:
+        ax = fig.add_subplot( 1, 1, 1 )
+        x = filtered_hours_since_eruption if filtered else hours_since_eruption
+        y = filtered_distance_km if filtered else distance_km
+        z = filtered_pressure_diff_hPa_minute if filtered else pressure_diff_hPa_minute
+        im = ax.scatter( x, y, c = z,
+                         cmap = cm.rainbow,
+                         linewidth = 0,
+                         vmin = pressure_diff_min_hPa_minute,
+                         vmax = pressure_diff_max_hPa_minute,
+                         s = 1 )
 
-    ax.set_xlabel( 'Time since eruption [hours]' )
-    ax.set_xlim( min_hours, max_hours )
-    ax.set_ylabel( 'Distance from Hunga Tonga [km]' )
-    ax.set_ylim( min_distance_km, max_distance_km )
-    yticks = ax.get_yticks()
-    yticks = [min_distance_km] + list( yticks ) + [max_distance_km]
-    ax.set_yticks( yticks )
-    ax.set_ylim( min_distance_km, max_distance_km )
-    ax.grid( True, which = 'major',
-             linewidth = 1, linestyle = '--', color = '#808080' )
-    fig.colorbar( im, ax = ax,
-                  label = 'Pressure difference from 1 minute ago [hPa]' )
-    ax.set_title( title )
+        ax.set_xlabel( 'Time since eruption [hours]' )
+        ax.set_xlim( min_hours, max_hours )
+        ax.set_ylabel( 'Distance from Hunga Tonga [km]' )
+        ax.set_ylim( min_distance_km, max_distance_km )
+        yticks = ax.get_yticks()
+        yticks = [min_distance_km] + list( yticks ) + [max_distance_km]
+        ax.set_yticks( yticks )
+        ax.set_ylim( min_distance_km, max_distance_km )
+        ax.grid( True, which = 'major',
+                 linewidth = 1, linestyle = '--', color = '#808080' )
+        fig.colorbar( im, ax = ax,
+                      label = 'Pressure difference from 1 minute ago [hPa]' )
 
-    fig.savefig( output_filename, bbox_inches = 'tight', pad_inches = 0.05 )
-    return fig2img( fig )
+        title  = f'{ordinal(shockwave_i+1)} shockwave from Hunga Tonga\n'
+        title +=  'US ASOS one minute interval pressure data'
+        if filtered:
+            title += ' (filtered)'
+        ax.set_title( title )
+
+        FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
+        if filtered:
+            filepath = FIG_OUTPUT_DIR / f'filtered_time_distance_shockwave_{shockwave_i}.png'
+        else:
+            filepath = FIG_OUTPUT_DIR / f'time_distance_shockwave_{shockwave_i}.png'
+            
+        fig.savefig( filepath, bbox_inches = 'tight', pad_inches = 0.05 )
+        tqdm.write( f'Generated {filepath}.' )
+
+        images[ 'filtered' if filtered else 'raw' ] = fig2img( fig )
+        fig.clear()
+        
+    return images
 
 def estimate_la_arrival_times():
     LA_COORD = Point( latitude  = 34.05,
@@ -331,26 +375,19 @@ def generate_shockwave_parameters(shockwave_num):
     return params
 
 def process_one_shockwave( shockwave_param ):
-    # Make sure that the output directory exists.
-    FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
 
     sqlite3_connection = sqlite3.connect( ASOS1MIN_SQLITE3_DATABASE )
+
+    images = generate_time_distance_scatter_plot( sqlite3_connection = sqlite3_connection,
+                                                  shockwave_i        = shockwave_param.shockwave_i,
+                                                  start_time         = shockwave_param.start_time,
+                                                  end_time           = shockwave_param.end_time,
+                                                  pressure_diff_max_hPa_minute = shockwave_param.pressure_diff_max_hPa_minute,
+                                                  pressure_diff_min_hPa_minute = shockwave_param.pressure_diff_min_hPa_minute )
+
+    sqlite3_connection.close()
     
-    # Time vs distance map with decorations
-    time_distance_filepath = FIG_OUTPUT_DIR / f'time_distance_shockwave_{shockwave_param.shockwave_i}.png'
-    title  = f'{ordinal(shockwave_param.shockwave_i+1)} shockwave from Hunga Tonga\n'
-    title +=  'US ASOS one minute interval pressure data'
-
-    img = generate_time_distance_scatter_plot( sqlite3_connection = sqlite3_connection,
-                                               output_filename    = time_distance_filepath,
-                                               start_time         = shockwave_param.start_time,
-                                               end_time           = shockwave_param.end_time,
-                                               pressure_diff_max_hPa_minute = shockwave_param.pressure_diff_max_hPa_minute,
-                                               pressure_diff_min_hPa_minute = shockwave_param.pressure_diff_min_hPa_minute,
-                                               title           = title )
-    tqdm.write( f'Generated {time_distance_filepath}' )
-
-    return img
+    return images
 
 def combine_images(images, padding = 10, portrait = True):
     one_width  = max( image.width  for image in images )
@@ -384,12 +421,16 @@ def main():
     time_distance_images = list( tqdm( pool.imap( process_one_shockwave, shockwave_params ),
                                        total = len( shockwave_params ) ) )
 
-    # Generate combined time vs distance image.
-    combined_time_distance_image = combine_images( time_distance_images, padding = 10, portrait = False )
-    FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
-    combined_time_distance_filepath = FIG_OUTPUT_DIR / 'time_distance_shockwaves.png'
-    combined_time_distance_image.save( combined_time_distance_filepath )
-    print( f'Generated {combined_time_distance_filepath}' )
+    # Generate combined time vs distance images.
+    for image_type, filename in [ ('raw',      'time_distance_shockwaves.png'),
+                                  ('filtered', 'filtered_time_distance_shockwaves.png') ]:
+        images = [ img_d[image_type] for img_d in time_distance_images ]
+        combined_time_distance_image = combine_images( images, padding = 10, portrait = False )
+        
+        FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
+        combined_filepath = FIG_OUTPUT_DIR / filename
+        combined_time_distance_image.save( combined_filepath )
+        print( f'Generated {combined_filepath}' )
 
     # Move the code below
         
