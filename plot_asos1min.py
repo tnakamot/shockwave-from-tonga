@@ -36,7 +36,7 @@ import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
 from geopy.distance import geodesic
-from scipy.signal import firwin
+from scipy.signal import firwin, hilbert
 from tqdm import tqdm
 
 from common import *
@@ -193,7 +193,10 @@ ORDER BY
     filtered_hours_since_eruption = []
     filtered_distance_km = []
     filtered_pressure_diff_hPa_minute = []
-    
+
+    distance_km_for_line = []
+    peak_hour_for_line = []
+
     for station_id in station_ids:
         cursor.execute( f'''
 SELECT
@@ -233,7 +236,7 @@ ORDER BY
             previous_timestamp    = current_timestamp
             previous_pressure_hPa = current_pressure_hPa
 
-        # High-pass filter
+
         if not minutes:
             continue
         
@@ -242,11 +245,33 @@ ORDER BY
         interp_minutes = np.arange( start_minutes, end_minutes, 1 )
         interp_pressure_hPas = np.interp( interp_minutes, minutes, pressure_hPas )
 
-        filtered_pressure_hPas = np.convolve( interp_pressure_hPas, filter_weight, 'same' )
+        # High-pass filter
+        #
+        # filtered_pressure_hPas = np.convolve( interp_pressure_hPas, filter_weight, 'same' )
+        # filtered_pressure_diff_hPa_minute.extend( np.diff( filtered_pressure_hPas ) )
+        # filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
+        # filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
 
+        # Hilbert transform
+        # interp_pressure_diff_hPa_minute = np.diff( interp_pressure_hPas )
+        # filtered_pressure_diff_hPa_minute.extend( np.abs( hilbert( interp_pressure_diff_hPa_minute ) ) )
+        # filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
+        # filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
+
+        # Hilbert transform & peak detection
+        interp_pressure_diff_hPa_minute = np.diff( interp_pressure_hPas )
+        envelope = np.abs( hilbert( interp_pressure_diff_hPa_minute ) )
+        peak = np.zeros( len( envelope ) )
+        peak[ np.argmax( envelope ) ] = 1.0
+        filtered_pressure_diff_hPa_minute.extend( peak )
         filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
         filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
-        filtered_pressure_diff_hPa_minute.extend( np.diff( filtered_pressure_hPas ) )
+
+        distance_km_for_line.append( station_distance_km[ station_id ] )
+        peak_hour_for_line.append( interp_minutes[ np.argmax( envelope ) ] / 60 )
+
+    p_fitted = np.polyfit( peak_hour_for_line, distance_km_for_line, 1 )
+    distance_km_for_fitted_line = np.poly1d( p_fitted )
 
     min_hours = np.min( hours_since_eruption )
     max_hours = np.max( hours_since_eruption )
@@ -260,14 +285,17 @@ ORDER BY
         x = filtered_hours_since_eruption if filtered else hours_since_eruption
         y = filtered_distance_km if filtered else distance_km
         z = filtered_pressure_diff_hPa_minute if filtered else pressure_diff_hPa_minute
-        vmin = pressure_diff_min_hPa_minute / 2 if filtered else pressure_diff_min_hPa_minute
-        vmax = pressure_diff_max_hPa_minute / 2 if filtered else pressure_diff_max_hPa_minute
+        vmin = pressure_diff_min_hPa_minute if filtered else pressure_diff_min_hPa_minute
+        vmax = pressure_diff_max_hPa_minute if filtered else pressure_diff_max_hPa_minute
         im = ax.scatter( x, y, c = z,
                          cmap = cm.rainbow,
                          linewidth = 0,
                          vmin = vmin,
                          vmax = vmax,
                          s = 1 )
+        if filtered:
+            ax.plot( peak_hour_for_line, distance_km_for_fitted_line( peak_hour_for_line ),
+                     color = 'black', linestyle = '-', linewidth = 3 )
 
         ax.set_xlabel( 'Time since eruption [hours]' )
         ax.set_xlim( min_hours, max_hours )
@@ -285,7 +313,7 @@ ORDER BY
         title  = f'{ordinal(shockwave_i+1)} shockwave from Hunga Tonga\n'
         title +=  'US ASOS one minute interval pressure data'
         if filtered:
-            title += ' (filtered)'
+            title += ' (max of hilbert abs)'
         ax.set_title( title )
 
         FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
