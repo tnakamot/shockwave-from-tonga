@@ -22,7 +22,9 @@
 
 import contextlib
 import io
+import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import cartopy.feature as cfea
 import cv2
@@ -53,10 +55,7 @@ EARTH_CIRCUMFERENCE = geodesic( HUNGA_TONGA_COORD, ANTIPODE_COORD ) * 2
 #  https://himawari.asia/himawari8-image.htm?sI=D531106&sClC=ffff00&sTA=true&sTAT=TY&sS=6&sNx=3&sNy=2&sL=-169.171875&sT=-426.8125&wW=1920&wH=969&sD=1642219800000
 ERUPTION_TIME       = datetime( 2022, 1, 15, 13, 10, tzinfo = TZ_JST )
 
-# InfluxDB host, port and database name
-INFLUX_DB_HOST = 'localhost'
-INFLUX_DB_PORT = 8086
-INFLUX_DB_NAME = 'shockwave_from_tonga'
+ASOS1MIN_SQLITE3_DATABASE = Path( os.path.dirname( os.path.realpath( __file__ ) ) ) / 'asos1min.sqlite3'
 
 def ordinal(i):
     if 11 <= (i % 100) <= 13:

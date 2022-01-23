@@ -7,3 +7,4 @@ __pycache__/
 /figure_asos1min/dump/
 \#*
 .#*
+*.sqlite3

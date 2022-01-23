@@ -22,6 +22,7 @@
 #
 
 import os
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from math import isnan, nan
@@ -39,46 +40,19 @@ from tqdm import tqdm
 
 from common import *
 
-# TODO: move this class out to common.py
-class PressureData:
-    def __init__(self, latitude_deg, longitude_deg, distance_km, date_time, pressure_hPa, pressure_hPa_diff):
-        self.latitude_deg  = latitude_deg
-        self.longitude_deg = longitude_deg
-        self.distance_km   = distance_km
-        self.date_time     = date_time
-        self.pressure_hPa  = pressure_hPa
-        self.pressure_hPa_diff = pressure_hPa_diff
+# Change this parameter to False to generate shockwave animation over the map os USA,
+# but it takes a very long time.
+SKIP_ANIMATION_GENERATION = True 
 
-def read_asos1min_pressure_data(filename):
-    f = open( filename, 'r', encoding = 'utf-8' )
+# The size of USA map.
+FIG_US_MAP_SIZE = (14.4, 6)
 
-    lines = f.readlines()
-    latitude_deg  = float( lines[4].split(',')[1] )
-    longitude_deg = float( lines[5].split(',')[1] )
-    distance_km   = geodesic( HUNGA_TONGA_COORD, ( latitude_deg, longitude_deg ) ).km
+# Output directory.
+FIG_OUTPUT_DIR = Path( 'figure_asos1min' )
 
-    records = []
-    pressure_hPa_diffs = []
-    
-    for line in lines[9:]:
-        fields = [ r.strip() for r in line.split(',') ]
-        date_time = datetime.fromisoformat( fields[0] )
-        pressure_inchHg   = float( fields[1] )
-        pressure_hPa      = pressure_inchHg * 33.863886666667
-
-        if records:
-            time_diff = date_time - records[-1].date_time
-            time_diff_minutes = time_diff.total_seconds() / 60
-            pressure_hPa_diff = ( pressure_hPa - records[-1].pressure_hPa ) / time_diff_minutes
-        else:
-            pressure_hPa_diff = nan
-
-        records.append( PressureData( latitude_deg, longitude_deg, distance_km, date_time, pressure_hPa, pressure_hPa_diff ) )
-        pressure_hPa_diffs.append( pressure_hPa_diff )
-
-    f.close()
-
-    return records
+# Table name in the SQLite3 database.
+STATION_TABLE_NAME = 'station'
+PRESSURE_DATA_TABLE_NAME = 'pressure_data'
 
 def draw_usa_map(fig, projection):
     START_LATITUDE_DEG  =  25.0
@@ -99,14 +73,14 @@ def generate_animation(fig,
                        gif_output_filepath,
                        start_time,
                        end_time,
-                       pressure_hPa_diff_max,
-                       pressure_hPa_diff_min,
+                       pressure_diff_max_hPa_minute,
+                       pressure_diff_min_hPa_minute,
                        title,
                        records):
     DUMP_OUTPUT_DIR = Path( 'figure_asos1min/dump' )
     DUMP_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
     
-    max_pressure_hPa_diff = max( abs( pressure_hPa_diff_max ), abs( pressure_hPa_diff_min ) )
+    max_pressure_hPa_diff = max( abs( pressure_diff_max_hPa_minute ), abs( pressure_diff_min_hPa_minute ) )
     pressure_diff_color_map = lambda dp: cm.rainbow( dp / max_pressure_hPa_diff / 2.0 + 0.5 )
 
     dump_mode = True
@@ -177,44 +151,90 @@ def generate_animation(fig,
     animation_data.save_gif( gif_output_filepath )
     tqdm.write( f'Generated {gif_output_filepath}' )
 
-def generate_time_distance_scatter_plot(output_filename,
+def generate_time_distance_scatter_plot(sqlite3_connection,
+                                        output_filename,
                                         start_time,
                                         end_time,
-                                        pressure_hPa_diff_max,
-                                        pressure_hPa_diff_min,
-                                        title,
-                                        records):
-    distances_km = []
-    hours_since_eruption = []
-    pressure_hPa_diffs = []
+                                        pressure_diff_max_hPa_minute,
+                                        pressure_diff_min_hPa_minute,
+                                        title):
 
-    for record in tqdm( records ):
-        if isnan( record.pressure_hPa_diff ):
-            continue
-        if record.date_time < start_time or record.date_time > end_time:
-            continue
-        if record.distance_km < 8000:
-            continue
-        
-        distances_km.append( record.distance_km )
-        hours_since_eruption.append( ( record.date_time - ERUPTION_TIME ).total_seconds() / 3600 )
-        pressure_hPa_diffs.append( record.pressure_hPa_diff )
+    MIN_DISTANCE_KM = 8000
+
+    cursor = sqlite3_connection.cursor()
+    cursor.execute( f'''
+SELECT
+    id,
+    distance_km
+FROM
+    {STATION_TABLE_NAME}
+WHERE
+    distance_km > ?
+ORDER BY
+    distance_km
+''', ( MIN_DISTANCE_KM, ) )
+
+    station_distance_km = {}
+    station_ids = []
+    for station_id, distance_km in cursor.fetchall():
+        station_distance_km[station_id] = distance_km
+        station_ids.append( station_id )
+
+    
+    hours_since_eruption = []
+    distance_km = []
+    pressure_diff_hPa_minute = []
+
+    for station_id in station_ids:
+        cursor.execute( f'''
+SELECT
+    timestamp,
+    pressure_hPa
+FROM
+    {PRESSURE_DATA_TABLE_NAME}
+WHERE
+    station_id = ? AND
+    timestamp >= ? AND
+    timestamp <  ?
+ORDER BY
+    timestamp ASC
+    ''', (station_id,
+          start_time.astimezone( timezone.utc ),
+          end_time.astimezone( timezone.utc ) ) )
+
+        previous_timestamp = None
+        previous_pressure_hPa = None
+        for row in cursor.fetchall():
+            current_timestamp    = datetime.fromisoformat( row[0] )
+            current_pressure_hPa = row[1]
+
+            if previous_timestamp:
+            # if previous_timestamp and \
+            #    ( ( current_timestamp - previous_timestamp ) == timedelta( minutes = 1 ) ) :
+
+                hours_since_eruption.append( ( current_timestamp - ERUPTION_TIME ).total_seconds() / 3600 )
+                pressure_diff_hPa_minute.append( current_pressure_hPa - previous_pressure_hPa )
+                distance_km.append( station_distance_km[ station_id ] )
+                
+            previous_timestamp    = current_timestamp
+            previous_pressure_hPa = current_pressure_hPa
 
     min_hours = np.min( hours_since_eruption )
     max_hours = np.max( hours_since_eruption )
-    min_distance_km = np.min( distances_km )
-    max_distance_km = np.max( distances_km )
+    min_distance_km = np.min( distance_km )
+    max_distance_km = np.max( distance_km )
     
     fig = plt.figure()
     ax = fig.add_subplot( 1, 1, 1 )
     im = ax.scatter( hours_since_eruption,
-                     distances_km,
-                     c = pressure_hPa_diffs,
+                     distance_km,
+                     c = pressure_diff_hPa_minute,
                      cmap = cm.rainbow,
                      linewidth = 0,
-                     vmin = pressure_hPa_diff_min,
-                     vmax = pressure_hPa_diff_max,
+                     vmin = pressure_diff_min_hPa_minute,
+                     vmax = pressure_diff_max_hPa_minute,
                      s = 1 )
+
     ax.set_xlabel( 'Time since eruption [hours]' )
     ax.set_xlim( min_hours, max_hours )
     ax.set_ylabel( 'Distance from Hunga Tonga [km]' )
@@ -245,6 +265,10 @@ def estimate_la_arrival_times():
         EARTH_CIRCUMFERENCE * 2 + HUNGA_TONGA_TO_LA,
         EARTH_CIRCUMFERENCE * 3 - HUNGA_TONGA_TO_LA,
         EARTH_CIRCUMFERENCE * 3 + HUNGA_TONGA_TO_LA,
+        EARTH_CIRCUMFERENCE * 4 - HUNGA_TONGA_TO_LA,
+        EARTH_CIRCUMFERENCE * 4 + HUNGA_TONGA_TO_LA,
+        EARTH_CIRCUMFERENCE * 5 - HUNGA_TONGA_TO_LA,
+        EARTH_CIRCUMFERENCE * 5 + HUNGA_TONGA_TO_LA,
     ]
 
     # Estimated travel speed of shockwave eastwards.
@@ -257,31 +281,39 @@ def estimate_la_arrival_times():
     estimated_la_arrival_times = []
     for shockwave_i, travel_distance in enumerate( travel_distances ):
         travel_speed_m_s = TRAVEL_SPEED_M_S_TO_EAST if shockwave_i % 2 == 0 else TRAVEL_SPEED_M_S_TO_WEST
-        estimated_la_arrival_times.append(
-            ERUPTION_TIME + timedelta( seconds = travel_distance.m / travel_speed_m_s )
-        )
+        estimated_la_arrival_time = ERUPTION_TIME + timedelta( seconds = travel_distance.m / travel_speed_m_s )
+        estimated_la_arrival_times.append( estimated_la_arrival_time )
     return estimated_la_arrival_times
-    
-def main():
-    # Read pressure data from CSV files.
-    print('Reading CSV files...')
-    SKIP_ANIMATION_GENERATION = False
-    
-    DATA_INPUT_DIR = Path( 'data_asos1min' )
-    csv_files = list( DATA_INPUT_DIR.glob( '*.csv' ) )
-    records = [ record for csv_file in tqdm( csv_files ) for record in read_asos1min_pressure_data( csv_file ) ]
 
-    FIG_OUTPUT_DIR = Path( 'figure_asos1min' )
-    FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
+class ShockwaveParameter:
+    def __init__(self,
+                 shockwave_i,
+                 start_time,
+                 end_time,
+                 pressure_diff_max_hPa_minute,
+                 pressure_diff_min_hPa_minute):
+        self.shockwave_i = shockwave_i
+        self.start_time  = start_time
+        self.end_time    = end_time
+        self.pressure_diff_max_hPa_minute = pressure_diff_max_hPa_minute
+        self.pressure_diff_min_hPa_minute = pressure_diff_min_hPa_minute
 
-    # Generate GIF animation.
-    FIG_US_MAP_SIZE = (14.4, 6)
-    fig_us_map = plt.figure( figsize = FIG_US_MAP_SIZE )
+def generate_shockwave_parameters(shockwave_num):
+    estimated_la_arrival_times = estimate_la_arrival_times()
+    params = []
 
-    start_time = datetime( 2022, 1, 15, 11, 30, tzinfo = timezone.utc )
-    end_time   = datetime( 2022, 1, 15, 18, 00, tzinfo = timezone.utc )
+    for shockwave_i in range(shockwave_num):
+        if shockwave_i < 2:
+            pressure_diff_max_hPa_minute =  0.25
+            pressure_diff_min_hPa_minute = -0.25
+        elif shockwave_i < 4:
+            pressure_diff_max_hPa_minute =  0.15
+            pressure_diff_min_hPa_minute = -0.15
+        else:
+            pressure_diff_max_hPa_minute =  0.05
+            pressure_diff_min_hPa_minute = -0.05
 
-    for shockwave_i, estimated_la_arrival_time in enumerate( tqdm( estimate_la_arrival_times() ) ):
+        estimated_la_arrival_time = estimated_la_arrival_times[shockwave_i]
         if shockwave_i % 2 == 0:
             start_time = estimated_la_arrival_time - timedelta( hours = 0.5 )
             end_time   = estimated_la_arrival_time + timedelta( hours = 7.5 )
@@ -289,42 +321,59 @@ def main():
             start_time = estimated_la_arrival_time - timedelta( hours = 5.5 )
             end_time   = estimated_la_arrival_time + timedelta( hours = 2.5 )
 
-        if shockwave_i < 2:
-            pressure_hPa_diff_max =  0.25
-            pressure_hPa_diff_min = -0.25
-        elif shockwave_i < 4:
-            pressure_hPa_diff_max =  0.15
-            pressure_hPa_diff_min = -0.15
-        else:
-            pressure_hPa_diff_max =  0.05
-            pressure_hPa_diff_min = -0.05
+        param = ShockwaveParameter( shockwave_i = shockwave_i,
+                                    start_time  = start_time,
+                                    end_time    = end_time,
+                                    pressure_diff_max_hPa_minute = pressure_diff_max_hPa_minute,
+                                    pressure_diff_min_hPa_minute = pressure_diff_min_hPa_minute )
+        params.append( param )
+    return params
 
-        time_distance_filepath = FIG_OUTPUT_DIR / f'time_distance_shockwave_{shockwave_i}.png'
-        title  = f'{ordinal(shockwave_i+1)} shockwave from Hunga Tonga\n'
-        title +=  'US ASOS one minute interval pressure data'
-        generate_time_distance_scatter_plot( output_filename = time_distance_filepath,
-                                             start_time      = start_time,
-                                             end_time        = end_time,
-                                             pressure_hPa_diff_max = pressure_hPa_diff_max,
-                                             pressure_hPa_diff_min = pressure_hPa_diff_min,
-                                             title           = title,
-                                             records         = records )
-        tqdm.write( f'Generated {time_distance_filepath}' )
+def process_one_shockwave( shockwave_param ):
+    # Make sure that the output directory exists.
+    FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
 
-        if SKIP_ANIMATION_GENERATION:
-            continue
+    sqlite3_connection = sqlite3.connect( ASOS1MIN_SQLITE3_DATABASE )
+    
+    # Time vs distance map with decorations
+    time_distance_filepath = FIG_OUTPUT_DIR / f'time_distance_shockwave_{shockwave_param.shockwave_i}.png'
+    title  = f'{ordinal(shockwave_param.shockwave_i+1)} shockwave from Hunga Tonga\n'
+    title +=  'US ASOS one minute interval pressure data'
 
-        # Generating animation on the map takes very long time.
-        gif_animation_filepath = FIG_OUTPUT_DIR / f'us_map_with_shockwave_{shockwave_i}.gif'
-        title = f'{ordinal(shockwave_i+1)} shockwave from Hunga Tonga'
-        generate_animation( fig                   = fig_us_map,
-                            gif_output_filepath   = gif_animation_filepath,
-                            start_time            = start_time,
-                            end_time              = end_time,
-                            pressure_hPa_diff_max = pressure_hPa_diff_max,
-                            pressure_hPa_diff_min = pressure_hPa_diff_min,
-                            title                 = title,
-                            records               = records )
+    generate_time_distance_scatter_plot( sqlite3_connection = sqlite3_connection,
+                                         output_filename    = time_distance_filepath,
+                                         start_time         = shockwave_param.start_time,
+                                         end_time           = shockwave_param.end_time,
+                                         pressure_diff_max_hPa_minute = shockwave_param.pressure_diff_max_hPa_minute,
+                                         pressure_diff_min_hPa_minute = shockwave_param.pressure_diff_min_hPa_minute,
+                                         title           = title )
+    tqdm.write( f'Generated {time_distance_filepath}' )
+
+    return 0
+
+def main():
+    shockwave_params = generate_shockwave_parameters( 8 )
+
+    pool = Pool( processes = len( os.sched_getaffinity(0) ) )
+    ret = list( tqdm( pool.imap( process_one_shockwave, shockwave_params ),
+                      total = len( shockwave_params ) ) )
+
+    # Move the code below
+        
+        # if SKIP_ANIMATION_GENERATION:
+        #     continue
+
+        # # Generating animation on the map takes very long time.
+        # gif_animation_filepath = FIG_OUTPUT_DIR / f'us_map_with_shockwave_{shockwave_i}.gif'
+        # title = f'{ordinal(shockwave_i+1)} shockwave from Hunga Tonga'
+        # generate_animation( fig                   = fig_us_map,
+        #                     gif_output_filepath   = gif_animation_filepath,
+        #                     start_time            = start_time,
+        #                     end_time              = end_time,
+        #                     pressure_diff_max_hPa_minute = pressure_diff_max_hPa_minute,
+        #                     pressure_diff_min_hPa_minute = pressure_diff_min_hPa_minute,
+        #                     title                 = title,
+        #                     records               = records )
 
 if __name__ == "__main__":
     main()

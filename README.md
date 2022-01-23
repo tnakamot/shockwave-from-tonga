@@ -33,7 +33,6 @@ If you want to reproduce the same videos above, follow the instructions below.
 You need the following software packages on your machine:
 
  * Python 3.8
- * InlufxDB 1.6.4
  * OpenCV 4.2.0 and its python binding
  
 In addition, you need the following python modules.
@@ -44,7 +43,6 @@ In addition, you need the following python modules.
  * matplotlib 3.1.2
  * cartopy 0.17.0
  * geopy 1.20.0
- * influxdb 5.2.0
  * Pillow 9.0.0
 
 The versions above are the ones that the author is using. You may use other versions, but they may not work.
@@ -52,7 +50,7 @@ The versions above are the ones that the author is using. You may use other vers
 On Ubuntu 20.04, you can install the above packages except Pillow the `apt` command:
 
 ```
- $ sudo apt install python3 influxdb python3-influxdb python3-opencv python3-tqdm python3-bs4 python3-numpy python3-matplotlib python3-cartopy python3-geopy
+ $ sudo apt install python3 python3-opencv python3-tqdm python3-bs4 python3-numpy python3-matplotlib python3-cartopy python3-geopy
 ```
 
 Then, you need to install Pillow with the commands below:

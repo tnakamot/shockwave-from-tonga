@@ -25,6 +25,7 @@
 import csv
 import urllib.request
 import urllib.parse
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from math import nan
@@ -32,12 +33,12 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 from geopy.distance import geodesic
-from influxdb import InfluxDBClient
 from tqdm import tqdm
 
 from common import *
 
-INFLUX_DB_MEASUREMENT = 'asos1min' # This must match the one in plot_asos1min.py
+STATION_TABLE_NAME = 'station'
+PRESSURE_DATA_TABLE_NAME = 'pressure_data'
 
 class AsosStation:
     '''This class represents one ASOS station.'''
@@ -51,6 +52,22 @@ class AsosStation:
         self.elevation_m   = elevation_m
         self.distance_km   = geodesic( HUNGA_TONGA_COORD, ( latitude_deg, longitude_deg ) ).km
 
+    def insert(self, sqlite3_connection):
+        sqlite3_connection.execute( f'''
+INSERT INTO {STATION_TABLE_NAME}
+(id, name, network, latitude_deg, longitude_deg, elevation_m, distance_km)
+VALUES
+(?, ?, ?, ?, ?, ?, ?)
+''',
+        [self.identifier,
+         self.name,
+         self.network,
+         self.latitude_deg,
+         self.longitude_deg,
+         self.elevation_m,
+         self.distance_km] )
+        sqlite3_connection.commit()
+        
 class AsosRecord:
     '''One record in the data from an ASOS station.'''
 
@@ -188,70 +205,56 @@ def get_asos1min_records(station, start_date_time, end_date_time):
 
     return records
 
-def convert_asos_records_to_csv(station, records):
-    '''This function outputs CSV string of the specified ASOS pressure records.
-
-    Parameters:
-    -----------
-    station: AsosStation
-        ASOS station where the records were obtained.
-    
-    records: list
-        ASOS pressure data records.
-
-    Returns:
-    --------
-    str
-         CSV in string.
-    '''
-
-    s = f'''
-Station Identifier       , {station.identifier}
-Station Name             , {station.name}
-Network                  , {station.network}
-Latitude [deg]           , {station.latitude_deg}
-Longitude [deg]          , {station.longitude_deg}
-Elevation [m]            , {station.elevation_m}
-
-Date & Time              , Prs [inch]
+def create_sqlite3_tables(sqlite3_connection):   
+    print( f'Creating table "{STATION_TABLE_NAME}" ...' )
+    sqlite3_connection.execute( f'DROP TABLE IF EXISTS {STATION_TABLE_NAME};' )
+    create_station_table = f'''
+CREATE TABLE {STATION_TABLE_NAME} (
+    id TEXT PRIMARY KEY,
+    name          TEXT,
+    network       TEXT,
+    latitude_deg  REAL,
+    longitude_deg REAL,
+    elevation_m   REAL,
+    distance_km   REAL
+);
 '''
-    
-    for record in records:
-        s += f'{record.date_time.isoformat()}, {record.sensor1_inch:11.6f}\n'
-        
-    return s
+    sqlite3_connection.execute( create_station_table )
 
-def record_to_influxdb_point(station, record):
-    return {
-        'measurement': INFLUX_DB_MEASUREMENT,
-        'tags': {
-            'station_id'   : station.identifier,
-            'latitude_deg' : station.latitude_deg,
-            'longitude_deg': station.longitude_deg,
-            'distance_km'  : station.distance_km,
-        },
-        "time": record.date_time,
-        "fields": {
-            'pressure_hPa': record.pressure_hPa
-        }
-    }
-    pass
+    print( f'Creating table "{PRESSURE_DATA_TABLE_NAME}" ...' )
+    sqlite3_connection.execute( f'DROP TABLE IF EXISTS {PRESSURE_DATA_TABLE_NAME};' )
+
+    create_pressure_data_table = f'''
+CREATE TABLE {PRESSURE_DATA_TABLE_NAME} (
+    station_id    TEXT,
+    timestamp     TIMESTAMP,
+    pressure_hPa  REAL,
+    FOREIGN KEY(station_id) REFERENCES station(id),
+    PRIMARY KEY (station_id, timestamp)
+);
+'''
+    sqlite3_connection.execute( create_pressure_data_table )
+
+def insert_records(sqlite3_connection, station, records):
+    sqlite3_connection.executemany( f'''
+INSERT INTO {PRESSURE_DATA_TABLE_NAME}
+(station_id, timestamp, pressure_hPa)
+VALUES
+(?, ?, ?)
+    ''', [ (station.identifier, record.date_time, record.pressure_hPa) for record in records ] )
+
+    sqlite3_connection.commit()
 
 def main():
     '''Main function'''
 
     START_TIME      = ERUPTION_TIME
-    END_TIME        = ERUPTION_TIME + timedelta( hours = 144 )
-    DATA_OUTPUT_DIR = Path( 'data_asos1min' )
+    END_TIME        = ERUPTION_TIME + timedelta( hours = 168 )
 
-    DATA_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
+    print( f'Opening SQLite3 database {ASOS1MIN_SQLITE3_DATABASE} ...' )
+    sqlite3_connection = sqlite3.connect( ASOS1MIN_SQLITE3_DATABASE )
 
-    print( f'Connecting InfluxDB on {INFLUX_DB_HOST}:{INFLUX_DB_PORT} ...' )
-    influx_client = InfluxDBClient( INFLUX_DB_HOST , INFLUX_DB_PORT )
-    
-    print( f'Creating InfluxDB database "{INFLUX_DB_NAME}" ...' )
-    influx_client.create_database( INFLUX_DB_NAME )
-    influx_client.switch_database( INFLUX_DB_NAME )
+    create_sqlite3_tables( sqlite3_connection )    
 
     print( 'Obtaining a list of ASOS stations in the ASOS1MIN network... ', end='', flush=True )
     station_identifiers = get_asos1min_station_identifiers()
@@ -262,25 +265,17 @@ def main():
     for station_identifier in tqdm( station_identifiers ):
         tqdm.write( f'Downloading data of ASOS station {station_identifier}... ', end = '' )
         station = get_asos_station( station_identifier )
+        station.insert( sqlite3_connection )
+        
         records = get_asos1min_records( station, START_TIME, END_TIME )
+        insert_records( sqlite3_connection, station, records )
         total_records += len( records )
         
-        influx_client.write_points( [ record_to_influxdb_point( station, record)
-                                      for record in records ] )
+        tqdm.write( f'imported { len( records ) } records into the SQLite3 database.' )
 
-        tqdm.write( f'imported { len( records ) } data points into InfluxDB (measurement = { INFLUX_DB_MEASUREMENT })' )
+    tqdm.write( f'Imported { total_records } records into the SQLite3 database {ASOS1MIN_SQLITE3_DATABASE} (table = {PRESSURE_DATA_TABLE_NAME} )' )
 
-        # Do not use CSV file anymore.
-        #
-        # csv_str = convert_asos_records_to_csv(station, records)
-        # output_file = DATA_OUTPUT_DIR / f'{station.identifier}.csv'
-        # f = open( output_file, 'w', encoding = 'utf-8' )
-        # f.write( csv_str )
-        # f.close()
-
-        # tqdm.write( f'saved in {output_file}' )
-
-    tqdm.write( f'Imported { total_records } data points in total into InfluxDB (measurement = { INFLUX_DB_MEASUREMENT })' )
+    sqlite3_connection.close()
     
 if __name__ == "__main__":
     main()
