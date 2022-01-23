@@ -36,6 +36,7 @@ import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
 from geopy.distance import geodesic
+from scipy.signal import firwin
 from tqdm import tqdm
 
 from common import *
@@ -159,6 +160,11 @@ def generate_time_distance_scatter_plot(sqlite3_connection,
                                         pressure_diff_min_hPa_minute):
 
     MIN_DISTANCE_KM = 8000
+    filter_weight = firwin( numtaps   = 151,
+                            cutoff    = [0.03, 0.2],
+                            window    = 'hamming',
+                            pass_zero = 'bandpass',
+                            fs        = 1.0 )
 
     cursor = sqlite3_connection.cursor()
     cursor.execute( f'''
@@ -238,11 +244,11 @@ ORDER BY
         interp_pressure_hPas = np.interp( interp_minutes, minutes, pressure_hPas )
 
         # TODO: apply high pass filter
+        filtered_pressure_hPas = np.convolve( interp_pressure_hPas, filter_weight, 'same' )
 
         filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
         filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
-        interp_pressure_diff_hPa_minute = np.diff( interp_pressure_hPas )
-        filtered_pressure_diff_hPa_minute.extend( interp_pressure_diff_hPa_minute )
+        filtered_pressure_diff_hPa_minute.extend( np.diff( filtered_pressure_hPas ) )
 
     min_hours = np.min( hours_since_eruption )
     max_hours = np.max( hours_since_eruption )
@@ -256,11 +262,13 @@ ORDER BY
         x = filtered_hours_since_eruption if filtered else hours_since_eruption
         y = filtered_distance_km if filtered else distance_km
         z = filtered_pressure_diff_hPa_minute if filtered else pressure_diff_hPa_minute
+        vmin = pressure_diff_min_hPa_minute / 2 if filtered else pressure_diff_min_hPa_minute
+        vmax = pressure_diff_max_hPa_minute / 2 if filtered else pressure_diff_max_hPa_minute
         im = ax.scatter( x, y, c = z,
                          cmap = cm.rainbow,
                          linewidth = 0,
-                         vmin = pressure_diff_min_hPa_minute,
-                         vmax = pressure_diff_max_hPa_minute,
+                         vmin = vmin,
+                         vmax = vmax,
                          s = 1 )
 
         ax.set_xlabel( 'Time since eruption [hours]' )
@@ -357,6 +365,10 @@ def generate_shockwave_parameters(shockwave_num):
         else:
             pressure_diff_max_hPa_minute =  0.05
             pressure_diff_min_hPa_minute = -0.05
+
+        if shockwave_i % 2 == 0:
+            pressure_diff_max_hPa_minute /= 2
+            pressure_diff_min_hPa_minute /= 2
 
         estimated_la_arrival_time = estimated_la_arrival_times[shockwave_i]
         if shockwave_i % 2 == 0:
