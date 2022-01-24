@@ -619,7 +619,6 @@ def main():
     ]
 
     chart_types_to_generate = [ chart_type for chart_type, filename in chart_type_and_filenames ]
-    chart_types_to_generate = ['raw_best_scale']
 
     params = list( itertools.product( shockwave_params, chart_types_to_generate ) )
     multi_process = True # Turn this switch to False for debugging in a single process mode.
