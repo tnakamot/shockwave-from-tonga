@@ -211,7 +211,7 @@ def configure_time_distance_scatter_ax(
         hours_since_eruption,
         distance_km,
         additional_title,
-        shockwave_i
+        shockwave_i,
 ):
 
     min_distance_km = min( distance_km )
@@ -235,57 +235,41 @@ def configure_time_distance_scatter_ax(
     title +=  additional_title
     ax.set_title( title )
 
-def generate_raw_time_distance_scatter_plot(
-        sqlite3_connection,
-        shockwave_i,
-        start_time,
-        end_time,
-):
-    
-    stations = AsosStations( sqlite3_connection )
-    
+def generate_raw_time_distance_scatter_plot( stations, data, shockwave_i, scale_mode ):
     hours_since_eruption = []
-    distance_km = []
     pressure_diff_hPa_minute = []
+    distance_km = []
 
     for station_id in stations.ids_in_range( min_distance_km = MIN_DISTANCE_KM ):
-        data = StationPressureData( sqlite3_connection,
-                                    station_id,
-                                    start_time,
-                                    end_time )
-        if data.is_empty():
+        if data[station_id].is_empty():
             continue
 
-        ps, ms = data.pressure_diff_hPa_minute( interpolate = None )
+        ps, ms = data[station_id].pressure_diff_hPa_minute( interpolate = None )
         hours_since_eruption.extend( [ m / 60.0 for m in ms ] )
         pressure_diff_hPa_minute.extend( ps )
         distance_km.extend( [ stations.distance_km( station_id ) ] * len( ps ) )
 
-
-    if shockwave_i < 2:
-        pressure_diff_max_hPa_minute =  0.25
-        pressure_diff_min_hPa_minute = -0.25
-    elif shockwave_i < 4:
-        pressure_diff_max_hPa_minute =  0.15
-        pressure_diff_min_hPa_minute = -0.15
-    else:
-        pressure_diff_max_hPa_minute =  0.05
-        pressure_diff_min_hPa_minute = -0.05
-
-    if shockwave_i % 2 == 0:
-        pressure_diff_max_hPa_minute /= 2
-        pressure_diff_min_hPa_minute /= 2
+    max_pressure_diff_hPa_minute = 0.05
+    if scale_mode == 'compare':
+        if shockwave_i == 0 or shockwave_i == 1:
+            max_pressure_diff_hPa_minute = 0.20
+        elif shockwave_i == 2 or shockwave_i == 3:
+            max_pressure_diff_hPa_minute = 0.10
+    elif scale_mode == 'best' and 0 <= shockwave_i <= 3:
+        max_pressure_diff_hPa_minute = (0.2, 0.25, 0.075, 0.15)[shockwave_i]
 
     fig = plt.figure()
     ax = fig.add_subplot( 1, 1, 1 )
-    im = ax.scatter( hours_since_eruption,
-                     distance_km,
-                     c = pressure_diff_hPa_minute,
-                     cmap = cm.rainbow,
-                     linewidth = 0,
-                     vmin = pressure_diff_min_hPa_minute,
-                     vmax = pressure_diff_max_hPa_minute,
-                     s = 1 )
+    im = ax.scatter(
+        hours_since_eruption,
+        distance_km,
+        c = pressure_diff_hPa_minute,
+        cmap = cm.rainbow,
+        linewidth = 0,
+        vmin = - max_pressure_diff_hPa_minute,
+        vmax = + max_pressure_diff_hPa_minute,
+        s = 1
+    )
 
     configure_time_distance_scatter_ax( ax,
                                         hours_since_eruption,
@@ -366,20 +350,49 @@ def generate_shockwave_parameters(shockwave_num):
         params.append( param )
     return params
 
-def process_one_shockwave( shockwave_param ):
+def process_one_shockwave( shockwave_param, chart_types ):
 
     sqlite3_connection = sqlite3.connect( ASOS1MIN_SQLITE3_DATABASE )
+    stations = AsosStations( sqlite3_connection )
+    data = { station_id: \
+             StationPressureData( sqlite3_connection,
+                                  station_id,
+                                  shockwave_param.start_time,
+                                  shockwave_param.end_time )
+             for station_id in stations.all_ids() }
 
-    raw_image = generate_raw_time_distance_scatter_plot(
-        sqlite3_connection = sqlite3_connection,
-        shockwave_i        = shockwave_param.shockwave_i,
-        start_time         = shockwave_param.start_time,
-        end_time           = shockwave_param.end_time,
-    )
+    chart_generators = [
+        ('raw_same_scale',
+         lambda: generate_raw_time_distance_scatter_plot(
+             stations    = stations,
+             data        = data,
+             shockwave_i = shockwave_param.shockwave_i,
+             scale_mode  = 'same',
+         ),
+        ),
+        ('raw_best_scale',
+         lambda: generate_raw_time_distance_scatter_plot(
+             stations    = stations,
+             data        = data,
+             shockwave_i = shockwave_param.shockwave_i,
+             scale_mode  = 'best',
+         ),
+        ),
+        ('raw_comparison',
+         lambda: generate_raw_time_distance_scatter_plot(
+             stations    = stations,
+             data        = data,
+             shockwave_i = shockwave_param.shockwave_i,
+             scale_mode  = 'compare',
+         ),
+        ),
+    ]
+
+    images = { name: generator() for name, generator in tqdm( chart_generators ) }
 
     sqlite3_connection.close()
     
-    return { 'raw': raw_image }
+    return images
 
 def combine_images(images, padding = 10, portrait = True):
     one_width  = max( image.width  for image in images )
@@ -408,14 +421,22 @@ def combine_images(images, padding = 10, portrait = True):
 def main():
     shockwave_nums   = 8
     shockwave_params = generate_shockwave_parameters( shockwave_nums )
+    chart_type_and_filenames = [
+        ('raw_same_scale', 'raw_time_distance_chart_same_scale.png'),
+        ('raw_best_scale', 'raw_time_distance_chart_best_scale.png'),
+        ('raw_comparison', 'raw_time_distance_chart_scale_for_comparison.png'),
+    ]
+    chart_types = [ chart_type for chart_type, filename in chart_type_and_filenames ]
 
+    image_generator_for_one_shockwave = partial( process_one_shockwave,
+                                                 chart_types = chart_types )
     pool = Pool( processes = len( os.sched_getaffinity(0) ) )
-    time_distance_images = list( tqdm( pool.imap( process_one_shockwave, shockwave_params ),
+    time_distance_images = list( tqdm( pool.imap( image_generator_for_one_shockwave, shockwave_params ),
                                        total = len( shockwave_params ) ) )
 
     # Generate combined time vs distance images.
-    for image_type, filename in [ ('raw',      'raw_time_distance_shockwaves.png') ]:
-        images = [ img_d[image_type] for img_d in time_distance_images ]
+    for chart_type, filename in chart_type_and_filenames:
+        images = [ img_d[chart_type] for img_d in time_distance_images ]
         combined_image = combine_images( images, padding = 10, portrait = False )
         
         FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
