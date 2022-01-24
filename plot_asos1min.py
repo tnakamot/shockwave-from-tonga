@@ -152,34 +152,85 @@ def generate_animation(fig,
     animation_data.save_gif( gif_output_filepath )
     tqdm.write( f'Generated {gif_output_filepath}' )
 
+
+class AsosStations:
+    def __init__(self, sqlite3_connection):
+        self._sqlite3_connection = sqlite3_connection
+        self._load()
+
+    def _load(self):
+        cursor = self._sqlite3_connection.cursor()
+        cursor.execute( f'''
+SELECT
+    id,
+    distance_km
+FROM
+    {STATION_TABLE_NAME}
+ORDER BY
+    distance_km
+''')
+        rows = cursor.fetchall()
+        self._station_ids = [ station_id for station_id, distance_km in rows ]
+        self._distance_km = { station_id: distance_km for station_id, distance_km in rows }
+        
+    def all_ids(self):
+        '''Get all station IDs of the ASOS1MIN network in ascending order of distance from Hunga Tonga.
+
+        Returns:
+        --------
+        list
+            List of station IDs (e.g., AGC). Typically, it is three or four letter string.
+            See the following web page to see what are the station IDs:
+            https://mesonet.agron.iastate.edu/request/asos/1min.phtml
+        '''
+        return self._station_ids
+
+    def ids_in_range( self,
+                      min_distance_km = 0,
+                      max_distance_km = 40000 ):
+        '''Get station IDs of the ASOS1MIN network stations in the specified range of distance from Hunga Tonga.
+
+        Parameters:
+        -----------
+        min_distance_km: float
+            Minimum distance from Hunga Tonga in km.
+
+        max_distance_km: float
+            Maximum distance from Hunga Tonga in km.
+
+        Returns:
+        --------
+        list
+            List of station IDs (e.g., AGC). They are in ascending order of distance from Hunga Tonga.
+        '''
+        return [ station_id for station_id in self._station_ids
+                 if min_distance_km <= self._distance_km[station_id] <= max_distance_km ]
+
+    def distance_km( self, station_id ):
+        '''Return the distance of the station from Hunga Tonga.
+
+        Parameters:
+        -----------
+        station_id: str
+            Station ID.
+
+        Returns:
+        --------
+        float
+            Distance from Hunga Tonga in km.
+        '''
+        return self._distance_km[ station_id ]
+
+
 def generate_time_distance_scatter_plot(sqlite3_connection,
                                         shockwave_i,
                                         start_time,
                                         end_time,
                                         pressure_diff_max_hPa_minute,
                                         pressure_diff_min_hPa_minute):
-
     MIN_DISTANCE_KM = 8000
-    
-    cursor = sqlite3_connection.cursor()
-    cursor.execute( f'''
-SELECT
-    id,
-    distance_km
-FROM
-    {STATION_TABLE_NAME}
-WHERE
-    distance_km > ?
-ORDER BY
-    distance_km
-''', ( MIN_DISTANCE_KM, ) )
 
-    station_distance_km = {}
-    station_ids = []
-    for station_id, distance_km in cursor.fetchall():
-        station_distance_km[station_id] = distance_km
-        station_ids.append( station_id )
-
+    stations = AsosStations( sqlite3_connection )
     
     hours_since_eruption = []
     distance_km = []
@@ -192,7 +243,9 @@ ORDER BY
     distance_km_for_line = []
     peak_hour_for_line = []
 
-    for station_id in station_ids:
+    cursor = sqlite3_connection.cursor()
+
+    for station_id in stations.ids_in_range( min_distance_km = MIN_DISTANCE_KM ):
         cursor.execute( f'''
 SELECT
     timestamp,
@@ -226,7 +279,7 @@ ORDER BY
                ( ( current_timestamp - previous_timestamp ) == timedelta( minutes = 1 ) ) :
                 hours_since_eruption.append( seconds_since_eruption / 3600 )
                 pressure_diff_hPa_minute.append( current_pressure_hPa - previous_pressure_hPa )
-                distance_km.append( station_distance_km[ station_id ] )
+                distance_km.append( stations.distance_km( station_id ) )
                 
             previous_timestamp    = current_timestamp
             previous_pressure_hPa = current_pressure_hPa
@@ -250,13 +303,13 @@ ORDER BY
         # filtered_pressure_hPas = np.convolve( interp_pressure_hPas, filter_weight, 'same' )
         # filtered_pressure_diff_hPa_minute.extend( np.diff( filtered_pressure_hPas ) )
         # filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
-        # filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
+        # filtered_distance_km.extend( [ stations.distance_km( station_id ) ] * ( len(interp_minutes) - 1 ) )
 
         # Hilbert transform
         # interp_pressure_diff_hPa_minute = np.diff( interp_pressure_hPas )
         # filtered_pressure_diff_hPa_minute.extend( np.abs( hilbert( interp_pressure_diff_hPa_minute ) ) )
         # filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
-        # filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
+        # filtered_distance_km.extend( [ stations.distance_km( station_id ) ] * ( len(interp_minutes) - 1 ) )
 
         # Hilbert transform & peak detection
         interp_pressure_diff_hPa_minute = np.diff( interp_pressure_hPas )
@@ -265,15 +318,14 @@ ORDER BY
         peak[ np.argmax( envelope ) ] = 1.0
         filtered_pressure_diff_hPa_minute.extend( peak )
         filtered_hours_since_eruption.extend( interp_minutes[1:] / 60 )
-        filtered_distance_km.extend( [ station_distance_km[ station_id ] ] * ( len(interp_minutes) - 1 ) )
+        filtered_distance_km.extend( [ stations.distance_km( station_id ) ] * ( len(interp_minutes) - 1 ) )
 
-        distance_km_for_line.append( station_distance_km[ station_id ] )
+        distance_km_for_line.append( stations.distance_km( station_id ) )
         peak_hour_for_line.append( interp_minutes[ np.argmax( envelope ) ] / 60 )
 
     p_fitted = np.polyfit( distance_km_for_line, peak_hour_for_line, 1 )
     peak_hour_for_fitted_line = np.poly1d( p_fitted )
     estimated_travel_speed_m_s = 1.0 / p_fitted[0] * 1000.0 / 3600.0
-    print(shockwave_i+1, estimated_travel_speed_m_s)
 
     min_hours = np.min( hours_since_eruption )
     max_hours = np.max( hours_since_eruption )
@@ -295,7 +347,7 @@ ORDER BY
                          vmin = vmin,
                          vmax = vmax,
                          s = 1 )
-        if filtered:
+        if filtered or not filtered:
             ax.plot( peak_hour_for_fitted_line( distance_km_for_line ),
                      distance_km_for_line,
                      color = 'black', linestyle = '-', linewidth = 1 )
