@@ -37,7 +37,7 @@ import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
 from geopy.distance import geodesic
-from scipy.signal import firwin, hilbert
+from scipy.signal import hilbert
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
@@ -245,6 +245,55 @@ def configure_time_distance_scatter_ax(
     title +=  'Based on US ASOS one minute interval pressure data\n'
     title +=  additional_title
     ax.set_title( title )
+
+def generate_time_distance_envelope_plot(
+        stations,
+        data,
+        shockwave_i,
+):
+    hours_since_eruption = []
+    pressure_diff_hPa_minute_envelope = []
+    distance_km = []
+
+    for station_id in stations.ids_in_range( min_distance_km = MIN_DISTANCE_KM ):
+        if data[station_id].is_empty():
+            continue
+
+        ps, ms = data[station_id].pressure_diff_hPa_minute( interpolate = 'linear' )
+        hours_since_eruption.extend( [ m / 60.0 for m in ms ] )
+        pressure_diff_hPa_minute_envelope.extend( abs( hilbert( ps ) ) )
+        distance_km.extend( [ stations.distance_km( station_id ) ] * len( ps ) )
+
+    max_pressure_diff_hPa_minute = 0.05
+    if 0 <= shockwave_i <= 3:
+        max_pressure_diff_hPa_minute = (0.2, 0.25, 0.075, 0.15)[shockwave_i]
+
+    fig = plt.figure()
+    ax = fig.add_subplot( 1, 1, 1 )
+    im = ax.scatter(
+        hours_since_eruption,
+        distance_km,
+        c = pressure_diff_hPa_minute_envelope,
+        cmap = cm.rainbow,
+        linewidth = 0,
+        vmin = 0,
+        vmax = max_pressure_diff_hPa_minute,
+        s = 1
+    )
+
+    configure_time_distance_scatter_ax( ax,
+                                        hours_since_eruption,
+                                        distance_km,
+                                        'Envelope of pressure difference from 1 minute ago',
+                                        shockwave_i )
+    fig.colorbar( im, ax = ax,
+                  label = 'Envelope of pressure difference from 1 minute ago [hPa]' )
+
+    img = fig2img( fig )
+    fig.clear()
+        
+    return img
+
     
 def generate_time_distance_scatter_plot(
         stations,
@@ -414,6 +463,11 @@ def visualize_one_shockwave( params ):
             scale_mode  = 'compare',
             interpolate = 'linear',
         ),
+        'envelope': lambda: generate_time_distance_envelope_plot(
+            stations    = stations,
+            data        = data,
+            shockwave_i = shockwave_param.shockwave_i,
+        ),
     }
 
     image = chart_generators[chart_type]()
@@ -458,10 +512,11 @@ def main():
         ('raw_best_scale', 'time_distance_chart_raw_best_scale.png'),
         ('raw_comparison', 'time_distance_chart_raw_scale_for_comparison.png'),
         ('interpolated'  , 'time_distance_chart_interpolated.png'),
+        ('envelope'      , 'time_distance_chart_envelope.png'),
     ]
 
     chart_types_to_generate = [ chart_type for chart_type, filename in chart_type_and_filenames ]
-    chart_types_to_generate = ['interpolated']
+    chart_types_to_generate = ['interpolated', 'envelope']
 
     params = list( itertools.product( shockwave_params, chart_types_to_generate ) )
     multi_process = True # Turn this switch to False for debugging in a single process mode.
