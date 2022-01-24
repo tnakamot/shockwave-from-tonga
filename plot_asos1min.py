@@ -606,7 +606,7 @@ def combine_images(images, padding = 10, portrait = True):
     return combined_image
 
 def main():
-    shockwave_nums   = 8
+    shockwave_nums   = 10
     shockwave_params = generate_shockwave_parameters( shockwave_nums )
     chart_type_and_filenames = [
         ('raw_same_scale'     , 'time_distance_chart_raw_same_scale.png'),
@@ -619,7 +619,7 @@ def main():
     ]
 
     chart_types_to_generate = [ chart_type for chart_type, filename in chart_type_and_filenames ]
-    chart_types_to_generate = ['positive_peak_time', 'negative_peak_time']
+    chart_types_to_generate = ['raw_best_scale']
 
     params = list( itertools.product( shockwave_params, chart_types_to_generate ) )
     multi_process = True # Turn this switch to False for debugging in a single process mode.

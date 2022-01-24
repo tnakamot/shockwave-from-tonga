@@ -249,7 +249,7 @@ def main():
     '''Main function'''
 
     START_TIME      = ERUPTION_TIME
-    END_TIME        = ERUPTION_TIME + timedelta( hours = 168 )
+    END_TIME        = ERUPTION_TIME + timedelta( hours = 216 )
 
     print( f'Opening SQLite3 database {ASOS1MIN_SQLITE3_DATABASE} ...' )
     sqlite3_connection = sqlite3.connect( ASOS1MIN_SQLITE3_DATABASE )
