@@ -160,34 +160,44 @@ ORDER BY
         self._pressure_hPa = [ row[1] for row in rows ]
 
     def is_empty( self ):
-        '''Returns True if there is no pressure data in the specified date and time range.'''
-        return len( self._timestamps ) == 0
+        '''Returns True if there is no pressure data or only one record in the specified date and time range.'''
+        return len( self._timestamps ) <= 1
 
-    def pressure_hPa( self, interpolate = None ):
+    def _get_pressure_hPa( self, interpolate = None ):
         minutes_since_eruption = np.array( [ ( t - ERUPTION_TIME ).total_seconds() / 60
                                              for t in self._timestamps ] )
-
         if not interpolate:
             return self._pressure_hPa, minutes_since_eruption
 
-        start_minutes = ( self._start_time - ERUPTION_TIME ).total_seconds() / 60
-        end_minutes   = ( self._end_time   - ERUPTION_TIME ).total_seconds() / 60
+        start_minutes = int( ( self._start_time - ERUPTION_TIME ).total_seconds() / 60 ) + 1
+        end_minutes   = int( ( self._end_time   - ERUPTION_TIME ).total_seconds() / 60 )
         interpolated_minutes_since_eruption = np.arange( start_minutes, end_minutes, 1 )
-        interpolated_pressure_hPa = interp1d( minutes_since_eruption,
-                                              self._pressure_hPa,
-                                              kind = interpolate,
-                                              fill_value = 'extrapolate', # TODO: revise this argument
-                                              copy = False,
-                                              assume_sorted = True )
-        return interpolated_pressure_hPa( interpolated_minutes_since_eruption ), \
-               interpolated_minutes_since_eruption
+        f_interpolate_pressure_hPa = interp1d( minutes_since_eruption,
+                                               self._pressure_hPa,
+                                               kind = interpolate,
+                                               copy = False,
+                                               assume_sorted = True )
+        extrapolate_start_n = int(minutes_since_eruption[0] - start_minutes)
+        extrapolate_end_n   = int(end_minutes - minutes_since_eruption[-1]) 
+        interp_start_i = extrapolate_start_n
+        interp_end_i   = len( interpolated_minutes_since_eruption ) - extrapolate_end_n
+        
+        interpolated_pressure_hPa = np.concatenate( (
+            np.full( extrapolate_start_n, self._pressure_hPa[0] ),
+            f_interpolate_pressure_hPa( interpolated_minutes_since_eruption[ interp_start_i : interp_end_i ] ),
+            np.full( extrapolate_end_n, self._pressure_hPa[-1] )
+        ) )
+        
+        return interpolated_pressure_hPa, interpolated_minutes_since_eruption
 
     def _pressure_diff_hPa_minute_interp( self, interpolate ):
-        pass # TODO: implement
+        pressure_hPa, minutes_since_eruption = self._get_pressure_hPa( interpolate )
+        _pressure_diff_hPa_minute = np.diff( pressure_hPa )
+        return _pressure_diff_hPa_minute, minutes_since_eruption[1:]
     
     def pressure_diff_hPa_minute( self, interpolate = None ):
         if interpolate:
-            return _pressure_diff_hPa_minute_interp( interpolate )
+            return self._pressure_diff_hPa_minute_interp( interpolate )
 
         previous_timestamp = None
         previous_pressure_hPa = None
@@ -235,8 +245,14 @@ def configure_time_distance_scatter_ax(
     title +=  'Based on US ASOS one minute interval pressure data\n'
     title +=  additional_title
     ax.set_title( title )
-
-def generate_raw_time_distance_scatter_plot( stations, data, shockwave_i, scale_mode ):
+    
+def generate_time_distance_scatter_plot(
+        stations,
+        data,
+        shockwave_i,
+        scale_mode,
+        interpolate = None
+):
     hours_since_eruption = []
     pressure_diff_hPa_minute = []
     distance_km = []
@@ -245,7 +261,7 @@ def generate_raw_time_distance_scatter_plot( stations, data, shockwave_i, scale_
         if data[station_id].is_empty():
             continue
 
-        ps, ms = data[station_id].pressure_diff_hPa_minute( interpolate = None )
+        ps, ms = data[station_id].pressure_diff_hPa_minute( interpolate )
         hours_since_eruption.extend( [ m / 60.0 for m in ms ] )
         pressure_diff_hPa_minute.extend( ps )
         distance_km.extend( [ stations.distance_km( station_id ) ] * len( ps ) )
@@ -370,23 +386,33 @@ def visualize_one_shockwave( params ):
              for station_id in stations.all_ids() }
 
     chart_generators = {
-        'raw_same_scale': lambda: generate_raw_time_distance_scatter_plot(
+        'raw_same_scale': lambda: generate_time_distance_scatter_plot(
             stations    = stations,
             data        = data,
             shockwave_i = shockwave_param.shockwave_i,
             scale_mode  = 'same',
+            interpolate = None,
         ),
-        'raw_best_scale': lambda: generate_raw_time_distance_scatter_plot(
+        'raw_best_scale': lambda: generate_time_distance_scatter_plot(
             stations    = stations,
             data        = data,
             shockwave_i = shockwave_param.shockwave_i,
             scale_mode  = 'best',
+            interpolate = None,
         ),
-        'raw_comparison': lambda: generate_raw_time_distance_scatter_plot(
+        'raw_comparison': lambda: generate_time_distance_scatter_plot(
             stations    = stations,
             data        = data,
             shockwave_i = shockwave_param.shockwave_i,
             scale_mode  = 'compare',
+            interpolate = None,
+        ),
+        'interpolated': lambda: generate_time_distance_scatter_plot(
+            stations    = stations,
+            data        = data,
+            shockwave_i = shockwave_param.shockwave_i,
+            scale_mode  = 'compare',
+            interpolate = 'linear',
         ),
     }
 
@@ -428,20 +454,29 @@ def main():
     shockwave_nums   = 8
     shockwave_params = generate_shockwave_parameters( shockwave_nums )
     chart_type_and_filenames = [
-        ('raw_same_scale', 'raw_time_distance_chart_same_scale.png'),
-        ('raw_best_scale', 'raw_time_distance_chart_best_scale.png'),
-        ('raw_comparison', 'raw_time_distance_chart_scale_for_comparison.png'),
+        ('raw_same_scale', 'time_distance_chart_raw_same_scale.png'),
+        ('raw_best_scale', 'time_distance_chart_raw_best_scale.png'),
+        ('raw_comparison', 'time_distance_chart_raw_scale_for_comparison.png'),
+        ('interpolated'  , 'time_distance_chart_interpolated.png'),
     ]
 
-    chart_types = [ chart_type for chart_type, filename in chart_type_and_filenames ]
+    chart_types_to_generate = [ chart_type for chart_type, filename in chart_type_and_filenames ]
+    chart_types_to_generate = ['interpolated']
 
-    params = list( itertools.product( shockwave_params, chart_types ) )
-    pool = Pool( processes = len( os.sched_getaffinity(0) ) )
-    visualized_shockwaves = list( tqdm( pool.imap( visualize_one_shockwave, params ),
-                                        total = len( params ) ) )
+    params = list( itertools.product( shockwave_params, chart_types_to_generate ) )
+    multi_process = True # Turn this switch to False for debugging in a single process mode.
+    if multi_process:
+        pool = Pool( processes = len( os.sched_getaffinity(0) ) )
+        visualized_shockwaves = list( tqdm( pool.imap( visualize_one_shockwave, params ),
+                                            total = len( params ) ) )
+    else:
+        visualized_shockwaves = [ visualize_one_shockwave(param) for param in tqdm( params ) ]
 
     # Generate combined time vs distance images.
     for chart_type, filename in chart_type_and_filenames:
+        if chart_type not in chart_types_to_generate:
+            continue
+            
         images = [ vs.image for vs in visualized_shockwaves if vs.chart_type == chart_type ]
         combined_image = combine_images( images, padding = 10, portrait = False )
         
