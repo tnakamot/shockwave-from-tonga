@@ -221,7 +221,7 @@ ORDER BY
 
         return _pressure_diff_hPa_minute, minutes_since_eruption
 
-def configure_time_distance_scatter_ax(
+def configure_time_distance_plot_ax(
         ax,
         hours_since_eruption,
         distance_km,
@@ -278,18 +278,18 @@ def generate_time_distance_envelope_plot(
         hours_since_eruption,
         distance_km,
         c = pressure_diff_hPa_minute_envelope,
-        cmap = cm.rainbow,
+        cmap = cm.RdPu,
         linewidth = 0,
         vmin = 0,
         vmax = max_pressure_diff_hPa_minute,
         s = 1
     )
 
-    configure_time_distance_scatter_ax( ax,
-                                        hours_since_eruption,
-                                        distance_km,
-                                        'Envelope of pressure difference from 1 minute ago',
-                                        shockwave_i )
+    configure_time_distance_plot_ax( ax,
+                                     hours_since_eruption,
+                                     distance_km,
+                                     'Envelope of pressure difference from 1 minute ago',
+                                     shockwave_i )
     fig.colorbar( im, ax = ax,
                   label = 'Envelope of pressure difference from 1 minute ago [hPa]' )
 
@@ -341,11 +341,11 @@ def generate_time_distance_scatter_plot(
         s = 1
     )
 
-    configure_time_distance_scatter_ax( ax,
-                                        hours_since_eruption,
-                                        distance_km,
-                                        'Pressure difference from 1 minute ago',
-                                        shockwave_i )
+    configure_time_distance_plot_ax( ax,
+                                     hours_since_eruption,
+                                     distance_km,
+                                     'Pressure difference from 1 minute ago',
+                                     shockwave_i )
     fig.colorbar( im, ax = ax,
                   label = 'Pressure difference from 1 minute ago [hPa]' )
 
@@ -388,11 +388,11 @@ def generate_time_distance_peak_time_plot(
     else:
         title = 'Negative peak time of 1-minute pressure difference'
 
-    configure_time_distance_scatter_ax( ax,
-                                        data[station_id].hours_since_eruption_range(),
-                                        distance_km,
-                                        title,
-                                        shockwave_i )
+    configure_time_distance_plot_ax( ax,
+                                     data[station_id].hours_since_eruption_range(),
+                                     distance_km,
+                                     title,
+                                     shockwave_i )
     img = fig2img( fig, pad_inches = 0.1 )
     fig.clear()
         
@@ -578,7 +578,8 @@ def main():
     ]
 
     chart_types_to_generate = [ chart_type for chart_type, filename in chart_type_and_filenames ]
-    chart_types_to_generate = ['positive_peak_time', 'negative_peak_time']
+#    chart_types_to_generate = ['positive_peak_time', 'negative_peak_time']
+    chart_types_to_generate = ['envelope']
 
     params = list( itertools.product( shockwave_params, chart_types_to_generate ) )
     multi_process = True # Turn this switch to False for debugging in a single process mode.
