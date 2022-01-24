@@ -64,7 +64,7 @@ def ordinal(i):
         suffix = ['th', 'st', 'nd', 'rd'] + ['th'] * 6
         return str(i) + suffix[i % 10]
 
-def fig2img(fig):
+def fig2img(fig, pad_inches = 0):
     '''Convert the given matplotlib Figure into Pillow Image.
 
     Parameters:
@@ -78,7 +78,7 @@ def fig2img(fig):
         Conversion result.
     '''
     buf = io.BytesIO()
-    fig.savefig( buf, bbox_inches = 'tight', pad_inches = 0 )
+    fig.savefig( buf, bbox_inches = 'tight', pad_inches = pad_inches )
     buf.seek( 0 )
     return Image.open( buf )
 

@@ -159,6 +159,10 @@ ORDER BY
         self._timestamps   = [ datetime.fromisoformat( row[0] ) for row in rows ]
         self._pressure_hPa = [ row[1] for row in rows ]
 
+    def hours_since_eruption_range( self ):
+        return ( ( self._start_time - ERUPTION_TIME ).total_seconds() / 3600,
+                 ( self._end_time   - ERUPTION_TIME ).total_seconds() / 3600 )
+    
     def is_empty( self ):
         '''Returns True if there is no pressure data or only one record in the specified date and time range.'''
         return len( self._timestamps ) <= 1
@@ -350,6 +354,50 @@ def generate_time_distance_scatter_plot(
         
     return img
 
+
+def generate_time_distance_peak_time_plot(
+        stations,
+        data,
+        shockwave_i,
+        positive,
+):
+    hours_since_eruption = []
+    distance_km = []
+
+    for station_id in stations.ids_in_range( min_distance_km = MIN_DISTANCE_KM ):
+        if data[station_id].is_empty():
+            continue
+
+        pressure_diff_hPa_minute, minutes_since_eruption = \
+            data[station_id].pressure_diff_hPa_minute( interpolate = None )
+        
+        if positive:
+            peak_i = np.argmax( pressure_diff_hPa_minute )            
+        else:
+            peak_i = np.argmin( pressure_diff_hPa_minute )
+            
+        hours_since_eruption.append( minutes_since_eruption[ peak_i ] / 60.0 )
+        distance_km.append( stations.distance_km( station_id ) )
+
+    fig = plt.figure()
+    ax = fig.add_subplot( 1, 1, 1 )
+    ax.plot( hours_since_eruption, distance_km, 'o' )
+
+    if positive:
+        title = 'Positive peak time of 1-minute pressure difference'
+    else:
+        title = 'Negative peak time of 1-minute pressure difference'
+
+    configure_time_distance_scatter_ax( ax,
+                                        data[station_id].hours_since_eruption_range(),
+                                        distance_km,
+                                        title,
+                                        shockwave_i )
+    img = fig2img( fig, pad_inches = 0.1 )
+    fig.clear()
+        
+    return img
+
 def estimate_la_arrival_times():
     LA_COORD = Point( latitude  = 34.05,
                       longitude = -118.25 )
@@ -468,6 +516,18 @@ def visualize_one_shockwave( params ):
             data        = data,
             shockwave_i = shockwave_param.shockwave_i,
         ),
+        'positive_peak_time': lambda: generate_time_distance_peak_time_plot(
+            stations    = stations,
+            data        = data,
+            shockwave_i = shockwave_param.shockwave_i,
+            positive    = True,
+        ),
+        'negative_peak_time': lambda: generate_time_distance_peak_time_plot(
+            stations    = stations,
+            data        = data,
+            shockwave_i = shockwave_param.shockwave_i,
+            positive    = False,
+        ),
     }
 
     image = chart_generators[chart_type]()
@@ -482,7 +542,7 @@ def visualize_one_shockwave( params ):
 
 def combine_images(images, padding = 10, portrait = True):
     one_width  = max( image.width  for image in images )
-    one_height = min( image.height for image in images )
+    one_height = max( image.height for image in images )
 
     if portrait:
         combined_width  = one_width * 2 + padding * 3
@@ -508,15 +568,17 @@ def main():
     shockwave_nums   = 8
     shockwave_params = generate_shockwave_parameters( shockwave_nums )
     chart_type_and_filenames = [
-        ('raw_same_scale', 'time_distance_chart_raw_same_scale.png'),
-        ('raw_best_scale', 'time_distance_chart_raw_best_scale.png'),
-        ('raw_comparison', 'time_distance_chart_raw_scale_for_comparison.png'),
-        ('interpolated'  , 'time_distance_chart_interpolated.png'),
-        ('envelope'      , 'time_distance_chart_envelope.png'),
+        ('raw_same_scale'     , 'time_distance_chart_raw_same_scale.png'),
+        ('raw_best_scale'     , 'time_distance_chart_raw_best_scale.png'),
+        ('raw_comparison'     , 'time_distance_chart_raw_scale_for_comparison.png'),
+        ('interpolated'       , 'time_distance_chart_interpolated.png'),
+        ('envelope'           , 'time_distance_chart_envelope.png'),
+        ('positive_peak_time' , 'time_distance_chart_positive_peak_time.png'),
+        ('negative_peak_time' , 'time_distance_chart_negative_peak_time.png'),
     ]
 
     chart_types_to_generate = [ chart_type for chart_type, filename in chart_type_and_filenames ]
-    chart_types_to_generate = ['interpolated', 'envelope']
+    chart_types_to_generate = ['positive_peak_time', 'negative_peak_time']
 
     params = list( itertools.product( shockwave_params, chart_types_to_generate ) )
     multi_process = True # Turn this switch to False for debugging in a single process mode.
