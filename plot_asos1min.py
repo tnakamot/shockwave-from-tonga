@@ -21,6 +21,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
+import itertools
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -350,7 +351,14 @@ def generate_shockwave_parameters(shockwave_num):
         params.append( param )
     return params
 
-def process_one_shockwave( shockwave_param, chart_types ):
+class VisualizedShockwave:
+    def __init__( self, shockwave_i, chart_type, image ):
+        self.shockwave_i = shockwave_i
+        self.chart_type  = chart_type
+        self.image       = image
+
+def visualize_one_shockwave( params ):
+    shockwave_param, chart_type = params
 
     sqlite3_connection = sqlite3.connect( ASOS1MIN_SQLITE3_DATABASE )
     stations = AsosStations( sqlite3_connection )
@@ -361,38 +369,36 @@ def process_one_shockwave( shockwave_param, chart_types ):
                                   shockwave_param.end_time )
              for station_id in stations.all_ids() }
 
-    chart_generators = [
-        ('raw_same_scale',
-         lambda: generate_raw_time_distance_scatter_plot(
-             stations    = stations,
-             data        = data,
-             shockwave_i = shockwave_param.shockwave_i,
-             scale_mode  = 'same',
-         ),
+    chart_generators = {
+        'raw_same_scale': lambda: generate_raw_time_distance_scatter_plot(
+            stations    = stations,
+            data        = data,
+            shockwave_i = shockwave_param.shockwave_i,
+            scale_mode  = 'same',
         ),
-        ('raw_best_scale',
-         lambda: generate_raw_time_distance_scatter_plot(
-             stations    = stations,
-             data        = data,
-             shockwave_i = shockwave_param.shockwave_i,
-             scale_mode  = 'best',
-         ),
+        'raw_best_scale': lambda: generate_raw_time_distance_scatter_plot(
+            stations    = stations,
+            data        = data,
+            shockwave_i = shockwave_param.shockwave_i,
+            scale_mode  = 'best',
         ),
-        ('raw_comparison',
-         lambda: generate_raw_time_distance_scatter_plot(
-             stations    = stations,
-             data        = data,
-             shockwave_i = shockwave_param.shockwave_i,
-             scale_mode  = 'compare',
-         ),
+        'raw_comparison': lambda: generate_raw_time_distance_scatter_plot(
+            stations    = stations,
+            data        = data,
+            shockwave_i = shockwave_param.shockwave_i,
+            scale_mode  = 'compare',
         ),
-    ]
+    }
 
-    images = { name: generator() for name, generator in tqdm( chart_generators ) }
+    image = chart_generators[chart_type]()
 
     sqlite3_connection.close()
     
-    return images
+    return VisualizedShockwave(
+        shockwave_i = shockwave_param.shockwave_i,
+        chart_type  = chart_type,
+        image       = image,
+    )
 
 def combine_images(images, padding = 10, portrait = True):
     one_width  = max( image.width  for image in images )
@@ -426,17 +432,17 @@ def main():
         ('raw_best_scale', 'raw_time_distance_chart_best_scale.png'),
         ('raw_comparison', 'raw_time_distance_chart_scale_for_comparison.png'),
     ]
+
     chart_types = [ chart_type for chart_type, filename in chart_type_and_filenames ]
 
-    image_generator_for_one_shockwave = partial( process_one_shockwave,
-                                                 chart_types = chart_types )
+    params = list( itertools.product( shockwave_params, chart_types ) )
     pool = Pool( processes = len( os.sched_getaffinity(0) ) )
-    time_distance_images = list( tqdm( pool.imap( image_generator_for_one_shockwave, shockwave_params ),
-                                       total = len( shockwave_params ) ) )
+    visualized_shockwaves = list( tqdm( pool.imap( visualize_one_shockwave, params ),
+                                        total = len( params ) ) )
 
     # Generate combined time vs distance images.
     for chart_type, filename in chart_type_and_filenames:
-        images = [ img_d[chart_type] for img_d in time_distance_images ]
+        images = [ vs.image for vs in visualized_shockwaves if vs.chart_type == chart_type ]
         combined_image = combine_images( images, padding = 10, portrait = False )
         
         FIG_OUTPUT_DIR.mkdir( parents = True, exist_ok = True )
