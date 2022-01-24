@@ -381,7 +381,10 @@ def generate_time_distance_peak_time_plot(
 
     fig = plt.figure()
     ax = fig.add_subplot( 1, 1, 1 )
-    ax.plot( hours_since_eruption, distance_km, 'o' )
+    ax.plot( hours_since_eruption, distance_km,
+             'o',
+             linestyle = None, linewidth = 0,
+             markersize = 3, color = 'blue' )
 
     if positive:
         title = 'Positive peak time of 1-minute pressure difference'
@@ -393,6 +396,44 @@ def generate_time_distance_peak_time_plot(
                                      distance_km,
                                      title,
                                      shockwave_i )
+
+    # Line fitting with M-estimator:
+    # https://docs.opencv.org/4.2.0/d3/dc0/group__imgproc__shape.html#gaf849da1fdafa67ee84b1e9a23b93f91f
+    points = list( zip( distance_km, hours_since_eruption ) )
+    v_distance_km, v_peak_hour, distance_km_0, peak_hour_0 = \
+        cv2.fitLine( np.array( points ), cv2.DIST_L12, 0, 0.01, 0.01 )
+    v_distance_km, v_peak_hour, distance_km_0, peak_hour_0 = \
+        v_distance_km[0], v_peak_hour[0], distance_km_0[0], peak_hour_0[0]
+    estimated_travel_speed_km_hour = v_distance_km / v_peak_hour
+    estimated_travel_speed_m_s     = estimated_travel_speed_km_hour * 1000.0 / 3600.0
+    h = np.array( data[station_id].hours_since_eruption_range() )
+    d = estimated_travel_speed_km_hour * ( h - peak_hour_0 ) + distance_km_0
+    ax.plot( h, d, '-', linewidth = 2, color = 'red' )
+
+    distance_km_annotation_point = ( max( distance_km ) + min( distance_km ) ) / 2
+    hours_annotation_point       = ( distance_km_annotation_point - distance_km_0 ) / estimated_travel_speed_km_hour + peak_hour_0
+
+    ax.annotate( 'Propagation speed\n' + \
+                 'estimated by M-estimator\n' + \
+                 f'{estimated_travel_speed_m_s:.1f} m/s',
+                 xy         = (hours_annotation_point, distance_km_annotation_point),
+                 xytext     = (0.95, 0.6 if estimated_travel_speed_m_s < 0 else 0.4),
+                 textcoords = ax.transAxes,
+                 verticalalignment   = 'center',
+                 horizontalalignment = 'right',
+                 multialignment      = 'left',
+                 fontsize            = 'large',
+                 arrowprops = dict(
+                     arrowstyle      = '->,head_length=1.0,head_width=0.5',
+                     color           = 'red',
+                     linewidth       = 3,
+                 ),
+                 bbox = dict(
+                     boxstyle  = 'round',
+                     facecolor = 'white',
+                     alpha     = 1.0 ),
+                 )
+    
     img = fig2img( fig, pad_inches = 0.1 )
     fig.clear()
         
@@ -578,8 +619,7 @@ def main():
     ]
 
     chart_types_to_generate = [ chart_type for chart_type, filename in chart_type_and_filenames ]
-#    chart_types_to_generate = ['positive_peak_time', 'negative_peak_time']
-    chart_types_to_generate = ['envelope']
+    chart_types_to_generate = ['positive_peak_time', 'negative_peak_time']
 
     params = list( itertools.product( shockwave_params, chart_types_to_generate ) )
     multi_process = True # Turn this switch to False for debugging in a single process mode.
