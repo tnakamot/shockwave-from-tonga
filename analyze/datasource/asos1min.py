@@ -196,8 +196,8 @@ class BarometricPressureDataSourceAsosOneMinute( BarometricPressureDataSourceBas
 
             records = self._get_barometric_pressure_records( station, START_TIME, END_TIME )
             BarometricPressureRecord.insert_records( database, records )
-            total_records += len( records )
-            
             tqdm.write( f'imported { len( records ) } records into the database.' )
+            
+            total_records += len( records )
             
         tqdm.write( f'Imported { total_records } records into the database { str( database ) }.' )
