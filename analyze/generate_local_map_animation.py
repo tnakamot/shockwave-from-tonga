@@ -69,12 +69,29 @@ class MapRange:
                  ERUPTION_TIME + max( time_since_eruption ) + END_TIME_MARGIN )
 
 DATA_SOURCES = {
-    'asos1min': ( BarometricPressureDataSourceAsosOneMinute(),
-                  MapRange( Point( latitude = 25.0, longitude = - 65.0 ),
-                            Point( latitude = 50.0, longitude = -125.0 ) ) ),
-    'jma'     : ( BarometricPressureDataSourceJMA(),
-                  MapRange( Point( latitude = 24.0, longitude = 120.0 ),
-                            Point( latitude = 46.0, longitude = 160.0 ) ) ),
+    'asos1min': {
+        'data_source': BarometricPressureDataSourceAsosOneMinute(),
+        'map_range'  : MapRange( Point( latitude = 23.0, longitude = - 65.0 ),
+                                 Point( latitude = 48.0, longitude = -125.0 ) ),
+        'acknowledgement': \
+'''Data from US ASOS sites
+through Iowa Environmental Mesonet
+of Iowa State University''',
+        'default_width_inch' : 14.4,
+        'default_height_inch':  6.0,
+        'default_dpi'        : 96.0,
+        'legend_loc'         : 'lower right',
+    },
+    'jma'     : {
+        'data_source': BarometricPressureDataSourceJMA(),
+        'map_range'  : MapRange( Point( latitude = 24.0, longitude = 120.0 ),
+                                 Point( latitude = 46.0, longitude = 160.0 ) ),
+        'acknowledgement': 'Data from Japan Meteorological Agency',
+        'default_width_inch' : 10.0,
+        'default_height_inch':  5.0,
+        'default_dpi'        : 96.0,
+        'legend_loc'         : 'center right',
+    },
 }
 
 def generate_animation(
@@ -83,26 +100,45 @@ def generate_animation(
         map_range,
         shockwave_i,
         output_dir,
-        dump_dir = None
+        width_inch,
+        height_inch,
+        dpi,
+        legend_loc = 'center right',
+        dump_dir = None,
+        show_wavefront = False,
+        acknowledgement = '',
 ):
+    # Output directory parameters
     output_dir.mkdir( parents = True, exist_ok = True )
     if dump_dir:
         dump_dir.mkdir( parents = True, exist_ok = True )
 
+    # Animation parameters
     start_time, end_time = map_range.get_time_range( shockwave_i )
     projection = ccrs.PlateCarree()
     animation_data = AnimationData( dump_mode = (dump_dir is not None) )
 
+    # Plot parameter
     # TODO: adjust accordingly
     max_pressure_diff_hPa_minute = 0.05
     pressure_diff_color_map = lambda dp: cm.rainbow( dp / max_pressure_diff_hPa_minute / 2.0 + 0.5 )
     markersize = 3
-        
-    records = []
-    recorded_timestamps = set()
+
+    wavefront_lines = [
+        WavefrontLine( travel_speed_m_s = 320, color = '#000000' ),
+        WavefrontLine( travel_speed_m_s = 315, color = '#FF00BF' ),
+        WavefrontLine( travel_speed_m_s = 310, color = '#8000FF' ),
+        WavefrontLine( travel_speed_m_s = 305, color = '#FFBF00' ),
+        WavefrontLine( travel_speed_m_s = 300, color = '#FF0000' ),
+    ]
+
+    # Obtain stations in the range
     stations = BarometricPressureMonitoringStation.get_all_stations_in_datasource( database, data_source )
     tqdm.write( f'{len(stations)} stations were found' )
-   
+
+    # Obtain pressure time derivative data for each station
+    records = []
+    recorded_timestamps = set()
     for station in stations:
         data = BarometricPressureMonitoringStationData( database, station, start_time, end_time )
         pressure_diff_hPa_minute, timestamp = data.pressure_diff_hPa_minute_with_timestamp( interpolate = None )
@@ -112,9 +148,7 @@ def generate_animation(
 
     tqdm.write( f'{len(records)} records were found' )
 
-    # TODO: parameterize the figure size
-    FIG_SIZE = (10, 5)
-    fig = plt.figure( figsize = FIG_SIZE )
+    fig = plt.figure( figsize = ( width_inch, height_inch ), dpi = dpi )
     recorded_timestamps = sorted( list( recorded_timestamps ) )
     for timestamp in tqdm( recorded_timestamps ):
         ax = fig.add_subplot( 1, 1, 1, projection = projection )
@@ -122,6 +156,8 @@ def generate_animation(
                          map_range.point1.latitude,  map_range.point2.latitude  ) )
         ax.add_feature( cfea.OCEAN, color = '#00FFFF' )
         ax.add_feature( cfea.LAND,  color = '#32CD32' )
+        ax.add_feature( cfea.BORDERS )
+        ax.add_feature( cfea.STATES )
         
         matched_records = [ record for record in records if record[1] == timestamp ]
         for station, _t, pressure_diff_hPa_minute in matched_records:
@@ -132,15 +168,29 @@ def generate_animation(
                      markersize = markersize,
                      color = pressure_diff_color_map( pressure_diff_hPa_minute ) )
 
-        # TODO: draw estimated wavefront
+        # Draw estimated wavefront.
+        legend_wavefront_lines = []
+        for wavefront_line in wavefront_lines:
+            if not show_wavefront:
+                break
+                
+            distance_m = wavefront_line.travel_speed_m_s * ( timestamp - ERUPTION_TIME ).total_seconds()
+            lines = draw_wavefront( ax,
+                                    distance       = geodesic( meters = distance_m ),
+                                    projection     = projection,
+                                    wavefront_line = wavefront_line )
+            
+            legend_wavefront_line = mlines.Line2D( [], [] )
+            legend_wavefront_line.update_from( lines[0][0] )
+            legend_wavefront_line.set_label( f'Estimated wavefront ({wavefront_line.travel_speed_m_s:d} m/s)' )
+            legend_wavefront_lines.append( legend_wavefront_line )
 
         # Generate legend.
         legend_items = []
         utc_timestamp = timestamp.astimezone( timezone.utc )
         legend_title_lines = [ f'{utc_timestamp.strftime("%Y-%m-%d %H:%M")} (UTC)',
-                               'Barometric Pressure',
-                               'Time Derivative']
-
+                               'Barometric Pressure Time Derivative']
+       
         legend_dps = np.linspace( max_pressure_diff_hPa_minute, -max_pressure_diff_hPa_minute, 5 )
         for legend_dp in legend_dps:
             legend_marker = mlines.Line2D( [], [],
@@ -151,13 +201,20 @@ def generate_animation(
                                            label = f'{legend_dp:+4.2f} hPa/minute' )
             legend_items.append( legend_marker )
 
-        legend_text_lines = ['Image by ',
-                             'Takashi Nakamoto']
+        for legend_wavefront_line in legend_wavefront_lines:
+            legend_items.append( legend_wavefront_line )
+            
+        legend_text_lines  = ['Image by Takashi Nakamoto']
+        legend_text_lines += acknowledgement.split('\n')
+        for legend_text_line in legend_text_lines:
+            legend_text = mlines.Line2D( [], [], marker = 'None', linestyle = 'None',
+                                         label = legend_text_line)
+            legend_items.append( legend_text )
 
         legend = ax.legend(
             handles = legend_items,
             title = '\n'.join(legend_title_lines),
-            loc = 'center right',
+            loc = legend_loc,
             fontsize = 'x-small'
         )
         legend.get_title().set_fontsize('x-small')
@@ -169,7 +226,7 @@ def generate_animation(
 
         animation_data.append( fig,
                                duration_ms = 200, #TODO: parameterize duration
-                               dump_path = dump_dir )
+                               dump_path = fig_output_filename )
 
         if dump_dir is not None:
             tqdm.write( f'Generated {fig_output_filename}' )
@@ -181,11 +238,12 @@ def generate_animation(
         fontsize = 24,
         duration_ms = 2000
     )
-    gif_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i}.gif'
+    wavefront_suffix = '_with_wavefront' if show_wavefront else ''
+    gif_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i}{wavefront_suffix}.gif'
     animation_data.save_gif( gif_output_filename )
     tqdm.write( f'Generated {gif_output_filename}' )
     
-    mp4_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i}.mp4'
+    mp4_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i}{wavefront_suffix}.mp4'
     animation_data.save_mp4( mp4_output_filename )
     tqdm.write( f'Generated {mp4_output_filename}' )
 
@@ -195,7 +253,7 @@ def create_argument_parser():
         formatter_class = argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # TODO: this can be moved to common.py.
+    # TODO: --db and source this can be moved to common.py.
     parser.add_argument(
         '--db',
         default = AnalysisDatabase.DEFAULT_DBFILE_PATH,
@@ -214,6 +272,30 @@ def create_argument_parser():
         help = 'Dump intermediate results to the specified directory.',
     )
     parser.add_argument(
+        '--wavefront',
+        dest   = 'show_wavefront',
+        action = 'store_true',
+        help   = 'Switch to draw estimated wavefront.',
+    )
+    parser.add_argument(
+        '--width',
+        dest   = 'width_inch',
+        type   = float,
+        help   = 'Width of the map in inches.',
+    )
+    parser.add_argument(
+        '--height',
+        dest   = 'height_inch',
+        type   = float,
+        help   = 'Height of the map in inches.',
+    )
+    parser.add_argument(
+        '--dpi',
+        dest   = 'dpi',
+        type   = float,
+        help   = 'Dot per inch.',
+    )
+    parser.add_argument(
         'source',
         choices = DATA_SOURCES.keys(),
         help = 'Data source name.',
@@ -228,15 +310,23 @@ def main():
     args = parser.parse_args()
 
     database = AnalysisDatabase( dbfile_path = args.db )
-    data_source, map_range = DATA_SOURCES[ args.source ]
+    width_inch = args.width_inch if args.width_inch else DATA_SOURCES[ args.source ][ 'default_width_inch' ]
+    height_inch = args.height_inch if args.height_inch else DATA_SOURCES[ args.source ][ 'default_height_inch' ]
+    dpi = args.dpi if args.dpi else DATA_SOURCES[ args.source ][ 'default_dpi' ]
 
     generate_animation(
-        database      = database,
-        data_source   = data_source,
-        map_range     = map_range,
-        shockwave_i   = 0,
-        output_dir    = args.outdir, 
-        dump_dir      = Path( args.dumpdir ) if args.dumpdir else None
+        database        = database,
+        data_source     = DATA_SOURCES[ args.source ][ 'data_source' ],
+        map_range       = DATA_SOURCES[ args.source ][ 'map_range' ],
+        shockwave_i     = 0,
+        output_dir      = args.outdir,
+        width_inch      = width_inch,
+        height_inch     = height_inch,
+        dpi             = dpi,
+        legend_loc      = DATA_SOURCES[ args.source ][ 'legend_loc' ],
+        dump_dir        = Path( args.dumpdir ) if args.dumpdir else None,
+        show_wavefront  = args.show_wavefront,
+        acknowledgement = DATA_SOURCES[ args.source ][ 'acknowledgement' ],
     )
 
 if __name__ == "__main__":
