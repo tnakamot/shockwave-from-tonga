@@ -38,9 +38,6 @@ from PIL import Image, ImageDraw, ImageFont
 # Japan Standard Time
 TZ_JST = timezone( timedelta( hours = +9 ), name = 'JST' ) # Japan Standard Time
 
-OCEAN_COLOR = '#00FFFF'
-LAND_COLOR  = '#32CD32'
-
 # Coordinate of Hunga Tonga.
 HUNGA_TONGA_COORD   = Point( latitude = -20.536 , longitude = -175.382 )
 
@@ -53,9 +50,11 @@ EARTH_CIRCUMFERENCE = geodesic( HUNGA_TONGA_COORD, ANTIPODE_COORD ) * 2
 
 # Hunga Tonga eruption time estimated from the satellite image of Himawari 8
 #  https://himawari.asia/himawari8-image.htm?sI=D531106&sClC=ffff00&sTA=true&sTAT=TY&sS=6&sNx=3&sNy=2&sL=-169.171875&sT=-426.8125&wW=1920&wH=969&sD=1642219800000
-ERUPTION_TIME       = datetime( 2022, 1, 15, 13, 10, tzinfo = TZ_JST )
+ERUPTION_TIME       = datetime( 2022, 1, 15, 13, 10, tzinfo = TZ_JST ).astimezone( timezone.utc )
 
 ASOS1MIN_SQLITE3_DATABASE = Path( os.path.dirname( os.path.realpath( __file__ ) ) ) / 'asos1min.sqlite3'
+
+DEFAULT_OUTPUT_DIR = Path( os.path.dirname( os.path.realpath( __file__ ) ) ).parent / 'output'
 
 def ordinal(i):
     if 11 <= (i % 100) <= 13:

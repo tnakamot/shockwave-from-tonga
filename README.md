@@ -58,7 +58,7 @@ Then, you need to install Pillow with the commands below:
 
 ```
  $ sudo apt install python3-pip
- $ python3 -m pip install Pillow
+ $ python3 -m pip install -U Pillow
 ```
 
 ### Pressure Data in Japan

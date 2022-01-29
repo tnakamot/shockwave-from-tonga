@@ -165,7 +165,163 @@ VALUES
             self.elevation_m,
             self.name
         ] )
+
+    @classmethod
+    def _get_all( cls, database, data_source = None ):
+        cursor = database.cursor()
+
+        sql_statement = f'''
+SELECT 
+    data_source,
+    identifier,
+    latitude_deg,
+    longitude_deg,
+    distance_km,
+    name
+FROM
+    {cls.TABLE_NAME}
+'''
+
+        # TODO: avoid SQL injection
+        if data_source:
+            sql_statement += f'''
+WHERE
+    data_source = "{data_source.name}"
+'''
+            
+        sql_statement += '''
+ORDER BY
+    distance_km
+'''
+
+        cursor.execute( sql_statement )
+            
+        rows = cursor.fetchall()
+        return [
+            BarometricPressureMonitoringStation(
+                data_source   = fields[0],
+                identifier    = fields[1],
+                latitude_deg  = fields[2],
+                longitude_deg = fields[3],
+                elevation_m   = fields[4],
+                name          = fields[5],
+            ) for fields in rows ]
+
+    @classmethod
+    def get_all_stations( cls, database ):
+        return cls._get_all( database )
+
+    @classmethod
+    def get_all_stations_in_datasource( cls, database, data_source ):
+        return cls._get_all( database, data_source )
+
+class BarometricPressureMonitoringStationData:
+    '''This class handles database access to the pressure data of the specified station.'''
+
+    def __init__( self, database, station, start_time, end_time ):
+        self._database   = database
+        self._station    = station
+        self._start_time = start_time.astimezone( timezone.utc )
+        self._end_time   =   end_time.astimezone( timezone.utc )
+        self._load()
         
+    def _load( self ):
+        cursor = self._database.cursor()
+        cursor.execute( f'''
+SELECT
+    timestamp,
+    pressure_hPa
+FROM
+    {BarometricPressureRecord.TABLE_NAME}
+WHERE
+    data_source = ? AND
+    station_id  = ? AND
+    timestamp  >= ? AND
+    timestamp  <  ?
+ORDER BY
+    timestamp ASC
+        ''', ( self._station.data_source,
+               self._station.identifier,
+               self._start_time,
+               self._end_time ) )
+        rows = cursor.fetchall()
+        self._timestamps   = [ datetime.fromisoformat( row[0] ) for row in rows ]
+        self._pressure_hPa = [ row[1] for row in rows ]
+
+    def hours_since_eruption_range( self ):
+        return ( ( self._start_time - ERUPTION_TIME ).total_seconds() / 3600,
+                 ( self._end_time   - ERUPTION_TIME ).total_seconds() / 3600 )
+    
+    def is_empty( self ):
+        '''Returns True if there is no pressure data or only one record in the specified date and time range.'''
+        return len( self._timestamps ) <= 1
+
+    def _get_pressure_hPa( self, interpolate = None ):
+        minutes_since_eruption = np.array( [ ( t - ERUPTION_TIME ).total_seconds() / 60
+                                             for t in self._timestamps ] )
+        if not interpolate:
+            return self._pressure_hPa, minutes_since_eruption
+
+        start_minutes = int( ( self._start_time - ERUPTION_TIME ).total_seconds() / 60 ) + 1
+        end_minutes   = int( ( self._end_time   - ERUPTION_TIME ).total_seconds() / 60 )
+        interpolated_minutes_since_eruption = np.arange( start_minutes, end_minutes, 1 )
+        f_interpolate_pressure_hPa = interp1d( minutes_since_eruption,
+                                               self._pressure_hPa,
+                                               kind = interpolate,
+                                               copy = False,
+                                               assume_sorted = True )
+        extrapolate_start_n = int(minutes_since_eruption[0] - start_minutes)
+        extrapolate_end_n   = int(end_minutes - minutes_since_eruption[-1]) 
+        interp_start_i = extrapolate_start_n
+        interp_end_i   = len( interpolated_minutes_since_eruption ) - extrapolate_end_n
+        
+        interpolated_pressure_hPa = np.concatenate( (
+            np.full( extrapolate_start_n, self._pressure_hPa[0] ),
+            f_interpolate_pressure_hPa( interpolated_minutes_since_eruption[ interp_start_i : interp_end_i ] ),
+            np.full( extrapolate_end_n, self._pressure_hPa[-1] )
+        ) )
+        
+        return interpolated_pressure_hPa, interpolated_minutes_since_eruption
+
+    def _pressure_diff_hPa_minute_interp( self, interpolate ):
+        pressure_hPa, minutes_since_eruption = self._get_pressure_hPa( interpolate )
+        _pressure_diff_hPa_minute = np.diff( pressure_hPa )
+        return _pressure_diff_hPa_minute, minutes_since_eruption[1:]
+    
+    def pressure_diff_hPa_minute( self, interpolate = None ):
+        if interpolate:
+            return self._pressure_diff_hPa_minute_interp( interpolate )
+
+        previous_timestamp = None
+        previous_pressure_hPa = None
+        minutes_since_eruption = []
+        _pressure_diff_hPa_minute = []
+        for i, current_timestamp in enumerate( self._timestamps ):
+            current_pressure_hPa = self._pressure_hPa[ i ]
+
+            if previous_timestamp:
+                seconds_since_eruption = ( current_timestamp - ERUPTION_TIME ).total_seconds()
+                minutes_since_eruption.append( seconds_since_eruption / 60 )
+
+                seconds_since_previous = ( current_timestamp - previous_timestamp).total_seconds()
+                pd_hPa_minute = ( current_pressure_hPa - previous_pressure_hPa ) * 60.0 / seconds_since_previous
+                _pressure_diff_hPa_minute.append( pd_hPa_minute )
+
+            previous_timestamp    = current_timestamp
+            previous_pressure_hPa = current_pressure_hPa
+
+        return _pressure_diff_hPa_minute, minutes_since_eruption
+
+    def pressure_diff_hPa_minute_with_timestamp( self, interpolate = None ):
+        _pressure_diff_hPa_minute, _minutes_since_eruption = \
+            self.pressure_diff_hPa_minute( interpolate )
+        
+        return \
+            _pressure_diff_hPa_minute, \
+            [ ERUPTION_TIME + timedelta( minutes = d_minute )
+              for d_minute in _minutes_since_eruption ]
+        
+
 class BarometricPressureRecord:
     '''One record of barometric pressure data from one monitoring station.'''
 
@@ -216,6 +372,6 @@ VALUES
 (?, ?, ?, ?)
     ''', [ ( record.station.data_source,
              record.station.identifier,
-             record.timestamp,
+             record.timestamp.astimezone( timezone.utc ),
              record.pressure_hPa) for record in records ] )
 
