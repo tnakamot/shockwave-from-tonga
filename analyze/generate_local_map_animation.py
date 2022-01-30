@@ -379,7 +379,7 @@ def create_argument_parser():
         help    = 'Maximum scale of pressure time derivative in hPa/minute.',
     )
     parser.add_argument(
-        '--single_process',
+        '--single-process',
         action = 'store_true',
         help    = 'Use a single process instead of multi processes. Useful for debugging.',
     )

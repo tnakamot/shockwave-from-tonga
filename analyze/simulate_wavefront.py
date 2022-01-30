@@ -45,37 +45,42 @@ def draw_frame(
         dump_dir,
         show_message = True,
 ):
-    fig = plt.figure( figsize = ( width_inch, height_inch ), dpi = dpi )
-    projection = ccrs.PlateCarree( central_longitude = 180.0 )
-    
-    ax = fig.add_subplot( 1, 1, 1, projection = projection )
-
-    ax.set_global()
-    ax.stock_img()
-    ax.add_feature( cfea.COASTLINE )
-    ax.add_feature( cfea.OCEAN )
-    ax.add_feature( cfea.LAND )
-    
     time_since_eruption = timedelta( minutes = minutes_from_eruption )
     date_time = ERUPTION_TIME + time_since_eruption
-    legend_items = []
 
-    for wavefront_line in wavefront_lines:
-        distance_m = wavefront_line.travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds()
-        lines = draw_wavefront( ax,
-                                distance       = geodesic( meters = distance_m ),
-                                projection     = projection,
-                                wavefront_line = wavefront_line )
+    fig = plt.figure( figsize = ( width_inch, height_inch ), dpi = dpi )
+    projections = [ ccrs.PlateCarree( central_longitude = 180.0 ) ]
+    # projections = [ ccrs.Geostationary( central_longitude = 180.0 ),
+    #                 ccrs.Geostationary( central_longitude =   0.0 )]
 
-        legend_wavefront_line = mlines.Line2D( [], [] )
-        legend_wavefront_line.update_from( lines[0][0] )
-        legend_wavefront_line.set_label( f'Speed = {wavefront_line.travel_speed_m_s:d} m/s' )
-        legend_items.append( legend_wavefront_line )
+    for projection_i, projection in enumerate( projections ):
+        ax = fig.add_subplot( 1, len( projections ), projection_i + 1, projection = projection )
 
-    # Draw legend
-    ax.legend( handles = legend_items,
-               loc = 'upper left',
-               fontsize = 'x-small' )
+        ax.set_global()
+        ax.stock_img()
+        ax.add_feature( cfea.COASTLINE )
+        ax.add_feature( cfea.OCEAN )
+        ax.add_feature( cfea.LAND )
+    
+        legend_items = []
+
+        for wavefront_line in wavefront_lines:
+            distance_m = wavefront_line.travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds()
+            lines = draw_wavefront( ax,
+                                    distance       = geodesic( meters = distance_m ),
+                                    projection     = projection,
+                                    wavefront_line = wavefront_line )
+
+            legend_wavefront_line = mlines.Line2D( [], [] )
+            legend_wavefront_line.update_from( lines[0][0] )
+            legend_wavefront_line.set_label( f'Speed = {wavefront_line.travel_speed_m_s:d} m/s' )
+            legend_items.append( legend_wavefront_line )
+
+        # Draw legend
+        if projection_i == 0:
+            ax.legend( handles = legend_items,
+                       loc = 'upper left',
+                       fontsize = 'x-small' )
         
     # Set title
     hours_since_eruption   = int( time_since_eruption.total_seconds() / 3600 )
@@ -84,7 +89,7 @@ def draw_frame(
     title  = 'Estimated wavefront from Hunga Tonga\n'
     title += f'{hours_since_eruption:3d}:{minutes_since_eruption:02d} since the eruption '
     title += '[' + date_time.astimezone( timezone.utc ).strftime('%Y-%m-%d %H:%M:%S (UTC)') + ']'
-    ax.set_title( title )
+    fig.suptitle( title )
 
     img = fig2img( fig, pad_inches = 0.1 )
     plt.close( fig )
@@ -181,37 +186,12 @@ def create_argument_parser():
         help = 'Output directory.',
     )
     parser.add_argument(
-        '--dump',
-        dest = 'dumpdir',
-        metavar = 'DUMPDIR',
-        help = 'Dump intermediate results to the specified directory.',
-    )
-    parser.add_argument(
-        '--width',
-        dest    = 'width_inch',
-        type    = float,
-        default = 10.0,
-        help    = 'Width of the map in inches.',
-    )
-    parser.add_argument(
-        '--height',
-        dest    = 'height_inch',
-        type    = float,
-        default = 5.0,
-        help    = 'Height of the map in inches.',
-    )
-    parser.add_argument(
-        '--dpi',
-        dest    = 'dpi',
-        type    = float,
-        default = 96.0,
-        help    = 'Dot per inch.',
-    )
-    parser.add_argument(
         '--interval',
         dest    = 'interval_minutes',
         type    = int,
         default = 10,
+        limit   = ( 1, 60 ),
+        action  = RangeArgument,
         help    = 'Simulation interval in minutes.',
     )
     parser.add_argument(
@@ -219,6 +199,8 @@ def create_argument_parser():
         dest    = 'duration_hours',
         type    = int,
         default = 216,
+        limit   = ( 1, 216 ),
+        action  = RangeArgument,
         help    = 'Simulation duration in hours.',
     )
     parser.add_argument(
@@ -226,10 +208,45 @@ def create_argument_parser():
         dest    = 'animation_speed',
         type    = float,
         default = 1.0,
+        limit   = ( 0.1, 10.0 ),
+        action  = RangeArgument,
         help    = 'Animation speed in seconds/hours.',
     )
     parser.add_argument(
-        '--single_process',
+        '--width',
+        dest    = 'width_inch',
+        type    = float,
+        default = 10.0,
+        limit   = ( 1.0, 100.0 ),
+        action  = RangeArgument,
+        help    = 'Width of the map in inches.',
+    )
+    parser.add_argument(
+        '--height',
+        dest    = 'height_inch',
+        type    = float,
+        default = 5.0,
+        limit   = ( 1.0, 100.0 ),
+        action  = RangeArgument,
+        help    = 'Height of the map in inches.',
+    )
+    parser.add_argument(
+        '--dpi',
+        dest    = 'dpi',
+        type    = float,
+        default = 96.0,
+        limit   = ( 1.0, 1000.0 ),
+        action  = RangeArgument,
+        help    = 'Dot per inch.',
+    )
+    parser.add_argument(
+        '--dump',
+        dest = 'dumpdir',
+        metavar = 'DUMPDIR',
+        help = 'Dump intermediate results to the specified directory.',
+    )
+    parser.add_argument(
+        '--single-process',
         action = 'store_true',
         help    = 'Use a single process instead of multi processes. Useful for debugging.',
     )

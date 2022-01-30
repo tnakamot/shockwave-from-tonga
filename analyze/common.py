@@ -20,6 +20,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
+import argparse
 import contextlib
 import io
 import os
@@ -141,3 +142,16 @@ class AnimationData:
             
         video.release()
 
+class RangeArgument( argparse.Action ):
+    def __init__( self, limit = None, *args, **kwargs ):
+        self.minimum = min( limit )
+        self.maximum = max( limit )
+        kwargs["metavar"] = f'[{self.minimum}-{self.maximum}]'
+        super( RangeArgument, self ).__init__( *args, **kwargs )
+
+    def __call__( self, parser, namespace, value, option_string =  None ):
+        if not (self.minimum <= value <= self.maximum):
+            msg = f'invalid choice: {value} (choose from [{self.minimum}-{self.maximum}])'
+            raise argparse.ArgumentError( self, msg )
+        setattr( namespace, self.dest, value )
+        
