@@ -26,7 +26,6 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import cartopy.feature as cfea
 import cv2
 import numpy as np
 from geopy.distance import geodesic
@@ -80,13 +79,6 @@ def fig2img(fig, pad_inches = 0):
     fig.savefig( buf, bbox_inches = 'tight', pad_inches = pad_inches )
     buf.seek( 0 )
     return Image.open( buf )
-
-def add_world_map(fig, projection):
-    ax = fig.add_subplot( 1, 1, 1, projection = projection )
-    ax.set_extent( ( -180, 180, -90, 90 ), projection )
-    ax.add_feature( cfea.OCEAN, color = OCEAN_COLOR )
-    ax.add_feature( cfea.LAND,  color = LAND_COLOR )
-    return ax
 
 class AnimationFrame:
     '''Represents one image in the animation data.'''
