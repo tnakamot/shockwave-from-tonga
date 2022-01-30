@@ -88,28 +88,6 @@ def add_world_map(fig, projection):
     ax.add_feature( cfea.LAND,  color = LAND_COLOR )
     return ax
 
-def draw_wavefront(ax, distance, projection, wavefront_line):
-    bearings = np.linspace(-180, 180, 360)
-    wavefront_points = [ distance.destination( point = HUNGA_TONGA_COORD, bearing = b ) for b in bearings ]
-
-    wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
-    wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
-
-    div_js = np.where( np.abs( np.diff( wavefront_longitude_deg ) ) > 180 )[0] + 1
-    div_js = np.append( div_js, len( wavefront_longitude_deg ) )
-    div_j_start = 0
-    lines = []
-    for div_j_end in div_js:
-        line = ax.plot( wavefront_longitude_deg[div_j_start:div_j_end],
-                        wavefront_latitude_deg[div_j_start:div_j_end],
-                        transform = projection,
-                        color = wavefront_line.color )
-        lines.append( line )
-        div_j_start = div_j_end
-
-    return lines
-
-
 class AnimationFrame:
     '''Represents one image in the animation data.'''
     def __init__(self, image, duration_ms):
@@ -171,8 +149,3 @@ class AnimationData:
             
         video.release()
 
-
-class WavefrontLine:
-    def __init__(self, travel_speed_m_s, color):
-        self.travel_speed_m_s = travel_speed_m_s
-        self.color            = color

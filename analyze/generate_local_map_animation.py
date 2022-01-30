@@ -41,6 +41,7 @@ from .database import \
     BarometricPressureMonitoringStation, \
     BarometricPressureMonitoringStationData
 from .common import *
+from .wavefront import *
 
 class MapRange:
     # Roughly estimated propagation speed of shockwave.
