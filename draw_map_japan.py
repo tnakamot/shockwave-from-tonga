@@ -35,6 +35,7 @@ import numpy as np
 from geopy.distance import geodesic
 from geopy.point import Point
 from tqdm import tqdm
+from PIL import Image
 
 from common import *
 

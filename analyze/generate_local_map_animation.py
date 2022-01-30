@@ -22,12 +22,15 @@
 
 import argparse
 from datetime import datetime, timedelta, timezone
+from functools import partial
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfea
 import matplotlib.cm as cm
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
+import numpy as np
+from multiprocessing import Pool
 from geopy.point import Point
 from tqdm import tqdm
 
@@ -94,6 +97,118 @@ of Iowa State University''',
     },
 }
 
+def generate_snapshot(
+        records,
+        data_source,
+        map_range,
+        width_inch,
+        height_inch,
+        dpi,
+        legend_loc,
+        dump_dir,
+        show_wavefront,
+        acknowledgement,
+        max_pressure_diff_hPa_minute,
+):
+    timestamp = records[0][1]
+    
+    projection = ccrs.PlateCarree()
+    markersize = 4
+    pressure_diff_color_map = lambda dp: cm.seismic( dp / max_pressure_diff_hPa_minute / 2.0 + 0.5 )
+    
+    fig = plt.figure( figsize = ( width_inch, height_inch ), dpi = dpi )
+    ax = fig.add_subplot( 1, 1, 1, projection = projection )
+    ax.set_extent( ( map_range.point1.longitude, map_range.point2.longitude,
+                     map_range.point1.latitude,  map_range.point2.latitude  ) )
+    ax.add_feature( cfea.OCEAN, color = '#FFFFFF' )
+    ax.add_feature( cfea.LAND,  color = '#C0C0C0' )
+    ax.add_feature( cfea.BORDERS )
+    ax.add_feature( cfea.STATES )
+
+    for station, _t, pressure_diff_hPa_minute in records:
+        ax.plot( station.longitude_deg,
+                 station.latitude_deg,
+                 'o',
+                 transform = projection,
+                 markersize = markersize,
+                 markeredgewidth = 0.5,
+                 markeredgecolor = 'black',
+                 color = pressure_diff_color_map( pressure_diff_hPa_minute ) )
+
+    # Draw estimated wavefront.
+    wavefront_lines = [
+        WavefrontLine( travel_speed_m_s = 320, color = '#000000' ),
+        WavefrontLine( travel_speed_m_s = 315, color = '#FF00BF' ),
+        WavefrontLine( travel_speed_m_s = 310, color = '#8000FF' ),
+        WavefrontLine( travel_speed_m_s = 305, color = '#FFBF00' ),
+        WavefrontLine( travel_speed_m_s = 300, color = '#FF0000' ),
+    ]
+
+    legend_wavefront_lines = []
+    for wavefront_line in wavefront_lines:
+        if not show_wavefront:
+            break
+                
+        distance_m = wavefront_line.travel_speed_m_s * ( timestamp - ERUPTION_TIME ).total_seconds()
+        lines = draw_wavefront( ax,
+                                distance       = geodesic( meters = distance_m ),
+                                projection     = projection,
+                                wavefront_line = wavefront_line )
+            
+        legend_wavefront_line = mlines.Line2D( [], [] )
+        legend_wavefront_line.update_from( lines[0][0] )
+        legend_wavefront_line.set_label( f'Estimated wavefront ({wavefront_line.travel_speed_m_s:d} m/s)' )
+        legend_wavefront_lines.append( legend_wavefront_line )
+
+    # Generate legend.
+    legend_items = []
+    utc_timestamp = timestamp.astimezone( timezone.utc )
+    legend_title_lines = [ f'{utc_timestamp.strftime("%Y-%m-%d %H:%M")} (UTC)',
+                            'Barometric Pressure Time Derivative']
+       
+    legend_dps = np.linspace( max_pressure_diff_hPa_minute, -max_pressure_diff_hPa_minute, 5 )
+    for legend_dp in legend_dps:
+        legend_marker = mlines.Line2D( [], [],
+                                       color = pressure_diff_color_map( legend_dp ),
+                                       marker = 'o',
+                                       linestyle = 'None',
+                                       markersize = markersize,
+                                       markeredgewidth = 0.5,
+                                       markeredgecolor = 'black',
+                                       label = f'{legend_dp:+5.3f} hPa/minute' )
+        legend_items.append( legend_marker )
+
+    for legend_wavefront_line in legend_wavefront_lines:
+        legend_items.append( legend_wavefront_line )
+            
+    legend_text_lines  = ['Image by Takashi Nakamoto']
+    legend_text_lines += acknowledgement.split('\n')
+    for legend_text_line in legend_text_lines:
+        legend_text = mlines.Line2D( [], [], marker = 'None', linestyle = 'None',
+                                         label = legend_text_line)
+        legend_items.append( legend_text )
+
+    legend = ax.legend(
+        handles = legend_items,
+        title = '\n'.join(legend_title_lines),
+        loc = legend_loc,
+        fontsize = 'x-small'
+    )
+    legend.get_title().set_fontsize('x-small')
+
+    img = fig2img( fig )
+    plt.close( fig )
+
+    if dump_dir is not None:
+        timestamp_str = timestamp.strftime('%Y%m%d_%H%M')
+        img_output_filename = dump_dir / f'{data_source.name}_shockwave_{timestamp_str}.png'
+        img.save( img_output_filename )
+
+        # TODO: output this message propery in the multiprocessing environment.
+        tqdm.write( f'Generated {img_output_filename}' )
+    
+    return np.array( img )
+
 def generate_animation(
         database,
         data_source,
@@ -115,22 +230,7 @@ def generate_animation(
 
     # Animation parameters
     start_time, end_time = map_range.get_time_range( shockwave_i )
-    projection = ccrs.PlateCarree()
-    animation_data = AnimationData( dump_mode = (dump_dir is not None) )
-
-    # Plot parameter
-    # TODO: adjust accordingly
-    max_pressure_diff_hPa_minute = 0.05
-    pressure_diff_color_map = lambda dp: cm.rainbow( dp / max_pressure_diff_hPa_minute / 2.0 + 0.5 )
-    markersize = 3
-
-    wavefront_lines = [
-        WavefrontLine( travel_speed_m_s = 320, color = '#000000' ),
-        WavefrontLine( travel_speed_m_s = 315, color = '#FF00BF' ),
-        WavefrontLine( travel_speed_m_s = 310, color = '#8000FF' ),
-        WavefrontLine( travel_speed_m_s = 305, color = '#FFBF00' ),
-        WavefrontLine( travel_speed_m_s = 300, color = '#FF0000' ),
-    ]
+    animation_data = AnimationData()
 
     # Obtain stations in the range
     stations = BarometricPressureMonitoringStation.get_all_stations_in_datasource( database, data_source )
@@ -148,90 +248,61 @@ def generate_animation(
 
     tqdm.write( f'{len(records)} records were found' )
 
-    fig = plt.figure( figsize = ( width_inch, height_inch ), dpi = dpi )
     recorded_timestamps = sorted( list( recorded_timestamps ) )
-    for timestamp in tqdm( recorded_timestamps ):
-        ax = fig.add_subplot( 1, 1, 1, projection = projection )
-        ax.set_extent( ( map_range.point1.longitude, map_range.point2.longitude,
-                         map_range.point1.latitude,  map_range.point2.latitude  ) )
-        ax.add_feature( cfea.OCEAN, color = '#00FFFF' )
-        ax.add_feature( cfea.LAND,  color = '#32CD32' )
-        ax.add_feature( cfea.BORDERS )
-        ax.add_feature( cfea.STATES )
-        
-        matched_records = [ record for record in records if record[1] == timestamp ]
-        for station, _t, pressure_diff_hPa_minute in matched_records:
-            ax.plot( station.longitude_deg,
-                     station.latitude_deg,
-                     'o',
-                     transform = projection,
-                     markersize = markersize,
-                     color = pressure_diff_color_map( pressure_diff_hPa_minute ) )
+    
+    multi_process = True # Turn this switch to False for debugging in a single process mode.
+    max_pressure_diff_hPa_minute = 0.05 # TODO: parameterize
+    duration_ms = 200 #TODO: parameterize duration
 
-        # Draw estimated wavefront.
-        legend_wavefront_lines = []
-        for wavefront_line in wavefront_lines:
-            if not show_wavefront:
-                break
-                
-            distance_m = wavefront_line.travel_speed_m_s * ( timestamp - ERUPTION_TIME ).total_seconds()
-            lines = draw_wavefront( ax,
-                                    distance       = geodesic( meters = distance_m ),
-                                    projection     = projection,
-                                    wavefront_line = wavefront_line )
-            
-            legend_wavefront_line = mlines.Line2D( [], [] )
-            legend_wavefront_line.update_from( lines[0][0] )
-            legend_wavefront_line.set_label( f'Estimated wavefront ({wavefront_line.travel_speed_m_s:d} m/s)' )
-            legend_wavefront_lines.append( legend_wavefront_line )
+    if multi_process:
+        pool = Pool( processes = len( os.sched_getaffinity(0) ) )
 
-        # Generate legend.
-        legend_items = []
-        utc_timestamp = timestamp.astimezone( timezone.utc )
-        legend_title_lines = [ f'{utc_timestamp.strftime("%Y-%m-%d %H:%M")} (UTC)',
-                               'Barometric Pressure Time Derivative']
-       
-        legend_dps = np.linspace( max_pressure_diff_hPa_minute, -max_pressure_diff_hPa_minute, 5 )
-        for legend_dp in legend_dps:
-            legend_marker = mlines.Line2D( [], [],
-                                           color = pressure_diff_color_map( legend_dp ),
-                                           marker = 'o',
-                                           linestyle = 'None',
-                                           markersize = markersize,
-                                           label = f'{legend_dp:+4.2f} hPa/minute' )
-            legend_items.append( legend_marker )
-
-        for legend_wavefront_line in legend_wavefront_lines:
-            legend_items.append( legend_wavefront_line )
-            
-        legend_text_lines  = ['Image by Takashi Nakamoto']
-        legend_text_lines += acknowledgement.split('\n')
-        for legend_text_line in legend_text_lines:
-            legend_text = mlines.Line2D( [], [], marker = 'None', linestyle = 'None',
-                                         label = legend_text_line)
-            legend_items.append( legend_text )
-
-        legend = ax.legend(
-            handles = legend_items,
-            title = '\n'.join(legend_title_lines),
-            loc = legend_loc,
-            fontsize = 'x-small'
+        one_process = partial(
+            generate_snapshot,
+            data_source = data_source,
+            map_range   = map_range,
+            width_inch  = width_inch,
+            height_inch = height_inch,
+            dpi         = dpi,
+            legend_loc  = legend_loc,
+            dump_dir    = dump_dir,
+            show_wavefront = show_wavefront,
+            acknowledgement = acknowledgement,
+            max_pressure_diff_hPa_minute = max_pressure_diff_hPa_minute,
         )
-        legend.get_title().set_fontsize('x-small')
-        
-        # Add this frame to the animation.
-        if dump_dir is not None:
-            timestamp_str = timestamp.strftime('%Y%m%d_%H%M')
-            fig_output_filename = dump_dir / f'{data_source.name}_shockwave_{timestamp_str}.png'
 
-        animation_data.append( fig,
-                               duration_ms = 200, #TODO: parameterize duration
-                               dump_path = fig_output_filename )
-
-        if dump_dir is not None:
-            tqdm.write( f'Generated {fig_output_filename}' )
+        split_records = []
+        for timestamp in recorded_timestamps:
+            split_records.append( [ record for record in records if record[1] == timestamp ] )
             
-        fig.clear()
+        img_arrays = list( tqdm( pool.imap( one_process, split_records ),
+                                 total = len( split_records ) ) )
+        for img_array in img_arrays:
+            animation_data.append(
+                Image.fromarray( img_array ),
+                duration_ms = duration_ms,
+            )
+        
+    else:
+        for timestamp in tqdm( recorded_timestamps ):
+            img_array = generate_snapshot(
+                [ record for record in records if record[1] == timestamp ],
+                data_source,
+                map_range,
+                width_inch,
+                height_inch,
+                dpi,
+                legend_loc,
+                dump_dir,
+                show_wavefront,
+                acknowledgement,
+                max_pressure_diff_hPa_minute = max_pressure_diff_hPa_minute,
+            )
+        
+            animation_data.append(
+                Image.fromarray( img_array ),
+                duration_ms = duration_ms,
+            )
 
     animation_data.add_cover(
         text = f'{ordinal( shockwave_i + 1 )} shockwave from Hunga Tonga',

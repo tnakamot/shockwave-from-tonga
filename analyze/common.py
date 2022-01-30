@@ -119,18 +119,15 @@ class AnimationFrame:
 class AnimationData:
     '''Represents one animation data.'''
 
-    def __init__(self, dump_mode = True):
+    def __init__(self):
         self.frames = []
         self.cover_frame = None
-        self.dump_mode   = dump_mode
         
-    def append(self, image, duration_ms, dump_path = None):
+    def append(self, image, duration_ms):
         if isinstance(image, Figure):
             image = fig2img( image )
             
         self.frames.append( AnimationFrame( image, duration_ms ) )
-        if self.dump_mode and dump_path:
-            image.save( dump_path )
 
     def add_cover(self, text, fontsize = 24, duration_ms = 2000):
         image_size  = self.frames[0].image.size
