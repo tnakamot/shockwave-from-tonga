@@ -85,6 +85,7 @@ of Iowa State University''',
         'default_width_inch' : 14.4,
         'default_height_inch':  6.0,
         'default_dpi'        : 96.0,
+        'default_step_minute':    5,
         'legend_loc'         : 'lower right',
     },
     'jma'     : {
@@ -95,6 +96,7 @@ of Iowa State University''',
         'default_width_inch' : 10.0,
         'default_height_inch':  5.0,
         'default_dpi'        : 96.0,
+        'default_step_minute':   10,
         'legend_loc'         : 'center right',
     },
 }
@@ -223,6 +225,7 @@ def generate_animation(
         height_inch,
         dpi,
         max_pressure_diff_hPa_minute,
+        step_minute,
         legend_loc = 'center right',
         dump_dir = None,
         show_wavefront = False,
@@ -255,6 +258,13 @@ def generate_animation(
     tqdm.write( f'{len(records)} records were found' )
 
     recorded_timestamps = sorted( list( recorded_timestamps ) )
+    data_dt_minutes = (recorded_timestamps[1] - recorded_timestamps[0]).total_seconds() / 60
+    data_step  = int( step_minute / data_dt_minutes )
+    if data_step < 1:
+        data_step = 1
+
+    # Decimate the timestamps
+    recorded_timestamps = recorded_timestamps[::data_step]
     
     dt_minutes = (recorded_timestamps[1] - recorded_timestamps[0]).total_seconds() / 60
     duration_ms = 40 * dt_minutes
@@ -387,6 +397,13 @@ def create_argument_parser():
         help    = 'Maximum scale of pressure time derivative in hPa/minute.',
     )
     parser.add_argument(
+        '--step',
+        type    = int,
+        limit   = ( 1, 10 ),
+        action  = RangeArgument,
+        help    = 'One frame is generated for this amount of minutes.',
+    )
+    parser.add_argument(
         '--single-process',
         action = 'store_true',
         help    = 'Use a single process instead of multi processes. Useful for debugging.',
@@ -416,6 +433,7 @@ def main():
     width_inch = args.width_inch if args.width_inch else DATA_SOURCES[ args.source ][ 'default_width_inch' ]
     height_inch = args.height_inch if args.height_inch else DATA_SOURCES[ args.source ][ 'default_height_inch' ]
     dpi = args.dpi if args.dpi else DATA_SOURCES[ args.source ][ 'default_dpi' ]
+    step_minute = args.step if args.step else DATA_SOURCES[ args.source ][ 'default_step_minute' ]
 
     generate_animation(
         database        = database,
@@ -427,6 +445,7 @@ def main():
         height_inch     = height_inch,
         dpi             = dpi,
         max_pressure_diff_hPa_minute = args.scale,
+        step_minute     = step_minute,
         multi_process   = not args.single_process,
         legend_loc      = DATA_SOURCES[ args.source ][ 'legend_loc' ],
         dump_dir        = Path( args.dumpdir ) if args.dumpdir else None,

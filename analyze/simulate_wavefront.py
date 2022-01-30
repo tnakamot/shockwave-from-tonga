@@ -249,7 +249,7 @@ def create_argument_parser():
         '--interval',
         dest    = 'interval_minutes',
         type    = int,
-        default = 10,
+        default = 60,
         limit   = ( 1, 60 ),
         action  = RangeArgument,
         help    = 'Simulation interval in minutes.',
