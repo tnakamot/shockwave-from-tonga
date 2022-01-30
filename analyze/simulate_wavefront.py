@@ -129,7 +129,7 @@ def draw_frame(
     return np.array( img )
 
 def generate_animation(
-        output_dir,
+        output_filepath,
         wavefront_lines,
         interval_minutes,
         duration_minutes,
@@ -143,7 +143,6 @@ def generate_animation(
         multi_process = True,
         dump_dir = None,
 ):
-    output_dir.mkdir( parents = True, exist_ok = True )
     if dump_dir:
         dump_dir.mkdir( parents = True, exist_ok = True )
     
@@ -194,17 +193,17 @@ def generate_animation(
                 Image.fromarray( img_array ),
                 duration_ms = int( seconds_per_frame * 1000.0 )
             )
-       
+
     animation_data.add_cover( text = 'Estimated wavefront of the shockwave\nfrom Hunga Tonga',
                               fontsize = 24,
                               duration_ms = 2000 )
-    gif_output_filename = output_dir / f'wavefront_simulation.gif'
-    animation_data.save_gif( gif_output_filename )
-    print( f'Generated {gif_output_filename}' )
 
-    mp4_output_filename = output_dir / f'wavefront_simulation.mp4'
-    animation_data.save_mp4( mp4_output_filename )
-    print( f'Generated {mp4_output_filename}' )
+    output_filepath.parent.mkdir( parents = True, exist_ok = True )
+    if output_filepath.suffix == '.gif':
+        animation_data.save_gif( output_filepath )
+    else:
+        animation_data.save_mp4( output_filepath )
+    print( f'Generated {output_filepath}' )
 
 def create_argument_parser():
     parser = argparse.ArgumentParser(
@@ -213,10 +212,12 @@ def create_argument_parser():
     )
 
     parser.add_argument(
-        '--outdir',
-        dest = 'outdir',
-        default = DEFAULT_OUTPUT_DIR,
-        help = 'Output directory.',
+        '--output',
+        dest    = 'output_filename',
+        default = DEFAULT_OUTPUT_DIR / 'wavefront_simulation.mp4',
+        ext_choices = ('mp4', 'gif'),
+        action  = FilenameArgument,
+        help    = 'Output file name. The file name extension must be either ".mp4" or ".gif".',
     )
     parser.add_argument(
         '--projection',
@@ -256,7 +257,7 @@ def create_argument_parser():
         '--duration',
         dest    = 'duration_hours',
         type    = int,
-        default = 216,
+        default = 72,
         limit   = ( 1, 216 ),
         action  = RangeArgument,
         help    = 'Simulation duration in hours.',
@@ -318,7 +319,7 @@ def main():
     args = parser.parse_args()
 
     generate_animation(
-        output_dir       = args.outdir,
+        output_filepath  = Path( args.output_filename ),
         wavefront_lines  = [
             WavefrontLine( travel_speed_m_s = 320, color = '#000000' ),
             WavefrontLine( travel_speed_m_s = 315, color = '#FF00BF' ),

@@ -154,4 +154,15 @@ class RangeArgument( argparse.Action ):
             msg = f'invalid choice: {value} (choose from [{self.minimum}-{self.maximum}])'
             raise argparse.ArgumentError( self, msg )
         setattr( namespace, self.dest, value )
-        
+
+class FilenameArgument( argparse.Action ):
+    def __init__( self, ext_choices = None, *args, **kwargs ):
+        self.ext_choices = ext_choices
+        super( FilenameArgument, self ).__init__( *args, **kwargs )
+
+    def __call__( self, parser, namespace, value, option_string =  None ):
+        if not any( [ value.endswith( '.' + ext ) for ext in self.ext_choices ] ):
+            msg = f'invalid file name extension: {value} (supported extensions: {", ".join(self.ext_choices)})'
+            raise argparse.ArgumentError( self, msg )
+        setattr( namespace, self.dest, value )
+
