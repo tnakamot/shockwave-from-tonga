@@ -41,8 +41,10 @@ def draw_wavefront(ax, distance, projection, wavefront_line):
     projected_wavefront_latitude_deg  = [ pp[1] for pp in projected_wavefront_points ]
     projected_wavefront_longitude_deg = [ pp[0] for pp in projected_wavefront_points ]
 
-    div_js = np.where( np.abs( np.diff( projected_wavefront_longitude_deg ) ) > 180 )[0] + 1
-    div_js = np.append( div_js, len( projected_wavefront_longitude_deg ) )
+    xlim = ax.get_xlim()[1]
+    
+    div_js = np.where( np.abs( np.diff( projected_wavefront_longitude_deg ) ) > xlim )[0] + 1
+    div_js = np.append( div_js, len( projected_wavefront_longitude_deg ) + 1 )
     div_j_start = 0
     lines = []
     for div_j_end in div_js:
