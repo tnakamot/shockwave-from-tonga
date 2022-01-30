@@ -31,9 +31,11 @@ https://user-images.githubusercontent.com/3995187/151719795-59948400-6674-4894-8
 
 ## Wavefront Simulation
 
-The animations below shows the simulated wavefronts of the shockwave from Hunga Tonga assuming the travel speed is 300, 305, 310, 315, or 320 m/s.
+The animations below shows simulated wavefronts of the shockwave from Hunga Tonga assuming the propagation speeds of 300, 305, 310, 315, and 320 m/s.
 
-https://user-images.githubusercontent.com/3995187/150633918-a81b4861-b6f1-457d-91fb-c05d861ed9ac.mp4
+https://user-images.githubusercontent.com/3995187/151721391-5f67805b-d132-492c-9644-b00462159e4e.mp4
+
+https://user-images.githubusercontent.com/3995187/151721398-5dffaf4c-e6ca-4727-b46c-ea50ddb6ce75.mp4
 
 ## How To
 
