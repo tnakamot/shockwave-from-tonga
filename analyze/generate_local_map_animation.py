@@ -358,24 +358,32 @@ def create_argument_parser():
         '--width',
         dest   = 'width_inch',
         type   = float,
+        limit   = ( 1.0, 100.0 ),
+        action  = RangeArgument,
         help   = 'Width of the map in inches.',
     )
     parser.add_argument(
         '--height',
         dest   = 'height_inch',
         type   = float,
+        limit   = ( 1.0, 100.0 ),
+        action  = RangeArgument,
         help   = 'Height of the map in inches.',
     )
     parser.add_argument(
         '--dpi',
         dest   = 'dpi',
         type   = float,
+        limit   = ( 1.0, 1000.0 ),
+        action  = RangeArgument,
         help   = 'Dot per inch.',
     )
     parser.add_argument(
         '--scale',
         type    = float,
         default = 0.1,
+        limit   = ( 0.01, 1.0 ),
+        action  = RangeArgument,
         help    = 'Maximum scale of pressure time derivative in hPa/minute.',
     )
     parser.add_argument(
@@ -390,8 +398,9 @@ def create_argument_parser():
     )
     parser.add_argument(
         'shockwave_i',
-        choices = range(1,9),
         type    = int,
+        limit   = ( 1, 9 ),
+        action  = RangeArgument,
         help    = 'Generate animation of i-th shockwave.',
     )
     
