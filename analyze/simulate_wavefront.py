@@ -46,11 +46,11 @@ def draw_frame(
         show_message = True,
 ):
     fig = plt.figure( figsize = ( width_inch, height_inch ), dpi = dpi )
-    projection = ccrs.PlateCarree()
+    projection = ccrs.PlateCarree( central_longitude = 180.0 )
     
     ax = fig.add_subplot( 1, 1, 1, projection = projection )
-    ax.set_extent( ( -180, 180, -90, 90 ), projection )
 
+    ax.set_global()
     ax.stock_img()
     ax.add_feature( cfea.COASTLINE )
     ax.add_feature( cfea.OCEAN )

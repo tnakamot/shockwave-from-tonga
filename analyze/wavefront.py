@@ -21,6 +21,7 @@
 #
 
 import numpy as np
+import cartopy.crs as ccrs
 
 from .common import *
 
@@ -30,19 +31,23 @@ class WavefrontLine:
         self.color            = color
 
 def draw_wavefront(ax, distance, projection, wavefront_line):
+    crs0 = ccrs.PlateCarree( central_longitude = 0 )
+    
     bearings = np.linspace(-180, 180, 360)
     wavefront_points = [ distance.destination( point = HUNGA_TONGA_COORD, bearing = b ) for b in bearings ]
+    projected_wavefront_points = \
+        [ projection.transform_point( p[1], p[0], crs0 ) for p in wavefront_points ]
 
-    wavefront_latitude_deg  = [ p[0] for p in wavefront_points ]
-    wavefront_longitude_deg = [ p[1] for p in wavefront_points ]
+    projected_wavefront_latitude_deg  = [ pp[1] for pp in projected_wavefront_points ]
+    projected_wavefront_longitude_deg = [ pp[0] for pp in projected_wavefront_points ]
 
-    div_js = np.where( np.abs( np.diff( wavefront_longitude_deg ) ) > 180 )[0] + 1
-    div_js = np.append( div_js, len( wavefront_longitude_deg ) )
+    div_js = np.where( np.abs( np.diff( projected_wavefront_longitude_deg ) ) > 180 )[0] + 1
+    div_js = np.append( div_js, len( projected_wavefront_longitude_deg ) )
     div_j_start = 0
     lines = []
     for div_j_end in div_js:
-        line = ax.plot( wavefront_longitude_deg[div_j_start:div_j_end],
-                        wavefront_latitude_deg[div_j_start:div_j_end],
+        line = ax.plot( projected_wavefront_longitude_deg[div_j_start:div_j_end],
+                        projected_wavefront_latitude_deg[div_j_start:div_j_end],
                         transform = projection,
                         color = wavefront_line.color )
         lines.append( line )
