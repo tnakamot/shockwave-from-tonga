@@ -87,8 +87,8 @@ of Iowa State University''',
     },
     'jma'     : {
         'data_source': BarometricPressureDataSourceJMA(),
-        'map_range'  : MapRange( Point( latitude = 24.0, longitude = 120.0 ),
-                                 Point( latitude = 46.0, longitude = 160.0 ) ),
+        'map_range'  : MapRange( Point( latitude = 23.0, longitude = 120.0 ),
+                                 Point( latitude = 45.0, longitude = 160.0 ) ),
         'acknowledgement': 'Data from Japan Meteorological Agency',
         'default_width_inch' : 10.0,
         'default_height_inch':  5.0,
@@ -109,6 +109,7 @@ def generate_snapshot(
         show_wavefront,
         acknowledgement,
         max_pressure_diff_hPa_minute,
+        show_message = True,
 ):
     timestamp = records[0][1]
     
@@ -204,8 +205,9 @@ def generate_snapshot(
         img_output_filename = dump_dir / f'{data_source.name}_shockwave_{timestamp_str}.png'
         img.save( img_output_filename )
 
-        # TODO: output this message propery in the multiprocessing environment.
-        tqdm.write( f'Generated {img_output_filename}' )
+        # tqdm.write doesn't work as expected if it is called in multiprocessing environment
+        if show_message:
+            tqdm.write( f'Generated {img_output_filename}' )
     
     return np.array( img )
 
@@ -218,10 +220,12 @@ def generate_animation(
         width_inch,
         height_inch,
         dpi,
+        max_pressure_diff_hPa_minute,
         legend_loc = 'center right',
         dump_dir = None,
         show_wavefront = False,
         acknowledgement = '',
+        multi_process = True,
 ):
     # Output directory parameters
     output_dir.mkdir( parents = True, exist_ok = True )
@@ -250,9 +254,8 @@ def generate_animation(
 
     recorded_timestamps = sorted( list( recorded_timestamps ) )
     
-    multi_process = True # Turn this switch to False for debugging in a single process mode.
-    max_pressure_diff_hPa_minute = 0.05 # TODO: parameterize
-    duration_ms = 200 #TODO: parameterize duration
+    dt_minutes = (recorded_timestamps[1] - recorded_timestamps[0]).total_seconds() / 60
+    duration_ms = 40 * dt_minutes
 
     if multi_process:
         pool = Pool( processes = len( os.sched_getaffinity(0) ) )
@@ -266,9 +269,10 @@ def generate_animation(
             dpi         = dpi,
             legend_loc  = legend_loc,
             dump_dir    = dump_dir,
-            show_wavefront = show_wavefront,
+            show_wavefront  = show_wavefront,
             acknowledgement = acknowledgement,
             max_pressure_diff_hPa_minute = max_pressure_diff_hPa_minute,
+            show_message    = False,
         )
 
         split_records = []
@@ -310,11 +314,11 @@ def generate_animation(
         duration_ms = 2000
     )
     wavefront_suffix = '_with_wavefront' if show_wavefront else ''
-    gif_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i}{wavefront_suffix}.gif'
+    gif_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i + 1}{wavefront_suffix}.gif'
     animation_data.save_gif( gif_output_filename )
     tqdm.write( f'Generated {gif_output_filename}' )
     
-    mp4_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i}{wavefront_suffix}.mp4'
+    mp4_output_filename = output_dir / f'{data_source.name}_shockwave_{shockwave_i + 1}{wavefront_suffix}.mp4'
     animation_data.save_mp4( mp4_output_filename )
     tqdm.write( f'Generated {mp4_output_filename}' )
 
@@ -324,7 +328,7 @@ def create_argument_parser():
         formatter_class = argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # TODO: --db and source this can be moved to common.py.
+    # TODO: "--db" and "source" this can be moved to common.py.
     parser.add_argument(
         '--db',
         default = AnalysisDatabase.DEFAULT_DBFILE_PATH,
@@ -367,9 +371,26 @@ def create_argument_parser():
         help   = 'Dot per inch.',
     )
     parser.add_argument(
+        '--scale',
+        type    = float,
+        default = 0.1,
+        help    = 'Maximum scale of pressure time derivative in hPa/minute.',
+    )
+    parser.add_argument(
+        '--single_process',
+        action = 'store_true',
+        help    = 'Use a single process instead of multi processes. Useful for debugging.',
+    )
+    parser.add_argument(
         'source',
         choices = DATA_SOURCES.keys(),
         help = 'Data source name.',
+    )
+    parser.add_argument(
+        'shockwave_i',
+        choices = range(1,9),
+        type    = int,
+        help    = 'Generate animation of i-th shockwave.',
     )
     
     return parser
@@ -389,11 +410,13 @@ def main():
         database        = database,
         data_source     = DATA_SOURCES[ args.source ][ 'data_source' ],
         map_range       = DATA_SOURCES[ args.source ][ 'map_range' ],
-        shockwave_i     = 0,
+        shockwave_i     = args.shockwave_i - 1,
         output_dir      = args.outdir,
         width_inch      = width_inch,
         height_inch     = height_inch,
         dpi             = dpi,
+        max_pressure_diff_hPa_minute = args.scale,
+        multi_process   = not args.single_process,
         legend_loc      = DATA_SOURCES[ args.source ][ 'legend_loc' ],
         dump_dir        = Path( args.dumpdir ) if args.dumpdir else None,
         show_wavefront  = args.show_wavefront,
