@@ -67,14 +67,15 @@ def draw_frame(
     for projection_i, projection in enumerate( projections ):
         ax = fig.add_subplot( 1, len( projections ), projection_i + 1, projection = projection )
 
+        # Draw world map.
         ax.set_global()
         ax.stock_img()
         ax.add_feature( cfea.COASTLINE )
         ax.add_feature( cfea.OCEAN )
         ax.add_feature( cfea.LAND )
-    
-        legend_items = []
 
+        # Draw wavefront lines.
+        legend_items = []
         for wavefront_line in wavefront_lines:
             distance_m = wavefront_line.travel_speed_m_s * ( date_time - ERUPTION_TIME ).total_seconds()
             lines = draw_wavefront( ax,
@@ -87,6 +88,17 @@ def draw_frame(
             legend_wavefront_line.set_label( f'Speed = {wavefront_line.travel_speed_m_s:d} m/s' )
             legend_items.append( legend_wavefront_line )
 
+
+        # Show the point of Hunga Tonga.
+        projected_hunga_tonga_point = projection.transform_point(
+            HUNGA_TONGA_COORD.longitude,
+            HUNGA_TONGA_COORD.latitude,
+            ccrs.PlateCarree( central_longitude = 0 )
+        )
+        ax.plot( projected_hunga_tonga_point[0], projected_hunga_tonga_point[1],
+                 'x',
+                 color = 'red' )
+            
         # Draw legend
         if projection_i == 0:
             ax.legend( handles = legend_items,
@@ -102,6 +114,7 @@ def draw_frame(
     title += '[' + date_time.astimezone( timezone.utc ).strftime('%Y-%m-%d %H:%M:%S (UTC)') + ']'
     fig.suptitle( title )
 
+    # Convert the matplotlib figure to an image.
     img = fig2img( fig, pad_inches = 0.1 )
     plt.close( fig )
     
