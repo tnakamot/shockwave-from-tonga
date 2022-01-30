@@ -84,7 +84,8 @@ def draw_frame(
                                     wavefront_line = wavefront_line )
 
             legend_wavefront_line = mlines.Line2D( [], [] )
-            legend_wavefront_line.update_from( lines[0][0] )
+            if lines:
+                legend_wavefront_line.update_from( lines[0][0] )
             legend_wavefront_line.set_label( f'Speed = {wavefront_line.travel_speed_m_s:d} m/s' )
             legend_items.append( legend_wavefront_line )
 

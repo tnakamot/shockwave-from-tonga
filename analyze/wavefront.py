@@ -22,6 +22,7 @@
 
 import numpy as np
 import cartopy.crs as ccrs
+from math import isnan
 
 from .common import *
 
@@ -38,11 +39,14 @@ def draw_wavefront(ax, distance, projection, wavefront_line):
     projected_wavefront_points = \
         [ projection.transform_point( p[1], p[0], crs0 ) for p in wavefront_points ]
 
-    projected_wavefront_latitude_deg  = [ pp[1] for pp in projected_wavefront_points ]
-    projected_wavefront_longitude_deg = [ pp[0] for pp in projected_wavefront_points ]
+    projected_wavefront_latitude_deg  = [ pp[1] for pp in projected_wavefront_points if not isnan( pp[1] ) ]
+    projected_wavefront_longitude_deg = [ pp[0] for pp in projected_wavefront_points if not isnan( pp[1] ) ]
+
+    if not projected_wavefront_latitude_deg:
+        return []
 
     xlim = ax.get_xlim()[1]
-    
+
     div_js = np.where( np.abs( np.diff( projected_wavefront_longitude_deg ) ) > xlim )[0] + 1
     div_js = np.append( div_js, len( projected_wavefront_longitude_deg ) + 1 )
     div_j_start = 0
