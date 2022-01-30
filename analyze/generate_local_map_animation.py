@@ -23,6 +23,7 @@
 import argparse
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from multiprocessing import Pool
 from pathlib import Path
 
 import cartopy.crs as ccrs
@@ -31,7 +32,6 @@ import matplotlib.cm as cm
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
-from multiprocessing import Pool
 from geopy.point import Point
 from tqdm import tqdm
 

@@ -22,6 +22,8 @@
 
 import argparse
 from datetime import datetime, timedelta, timezone
+from functools import partial
+from multiprocessing import Pool
 from pathlib import Path
 
 import cartopy.crs as ccrs
@@ -35,10 +37,10 @@ from .common import *
 from .wavefront import *
 
 def draw_frame(
+        minutes_from_eruption,
         width_inch,
         height_inch,
         dpi,
-        minutes_from_eruption,
         wavefront_lines,
         dump_dir,
         show_message = True,
@@ -116,21 +118,43 @@ def generate_animation(
     simulation_range = range( 0, duration_minutes + interval_minutes, interval_minutes )
     seconds_per_frame = animation_speed_seconds_hours * interval_minutes / 60.0
 
-    for minutes_from_eruption in tqdm( simulation_range ):
-        img_array = draw_frame(
-            width_inch,
-            height_inch,
-            dpi,
-            minutes_from_eruption,
-            wavefront_lines,
-            dump_dir,
-            show_message = True,
+    if multi_process:
+        pool = Pool( processes = len( os.sched_getaffinity(0) ) )
+
+        one_process = partial(
+            draw_frame,
+            width_inch      = width_inch,
+            height_inch     = height_inch,
+            dpi             = dpi,
+            wavefront_lines = wavefront_lines,
+            dump_dir        = dump_dir,
+            show_message    = False,
         )
+
+        img_arrays = list( tqdm( pool.imap( one_process, list( simulation_range ) ),
+                                 total = len( simulation_range ) ) )
+
+        for img_array in img_arrays:
+            animation_data.append(
+                Image.fromarray( img_array ),
+                duration_ms = int( seconds_per_frame * 1000.0 ),
+            )
+    else:
+        for minutes_from_eruption in tqdm( simulation_range ):
+            img_array = draw_frame(
+                minutes_from_eruption,
+                width_inch,
+                height_inch,
+                dpi,
+                wavefront_lines,
+                dump_dir,
+                show_message = True,
+            )
         
-        animation_data.append(
-            Image.fromarray( img_array ),
-            duration_ms = int( seconds_per_frame * 1000.0 )
-        )
+            animation_data.append(
+                Image.fromarray( img_array ),
+                duration_ms = int( seconds_per_frame * 1000.0 )
+            )
        
     animation_data.add_cover( text = 'Estimated wavefront of the shockwave\nfrom Hunga Tonga',
                               fontsize = 24,
