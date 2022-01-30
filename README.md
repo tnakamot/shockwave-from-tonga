@@ -21,6 +21,14 @@ The above animations clearly show that the shockwave from Hunga Tonga ([20°32'0
  * Third: January 17, 2022, 09:00 AM (JST)
     * This is about about 1 and half days after the first wave. Because the circumference of the Eeath is about 40,000 km, we can calculate that the speed of this shockwave is about 309 m/s. This result is almost consistent with the above calculations.
 
+## US
+
+The animations below show time derivative of barometric pressure in United States. They are based on one-minute barometric pressure data of [US Automated Surface Observing System (ASOS)](https://www.ncei.noaa.gov/products/land-based-station/automated-surface-weather-observing-systems) (approximately 900 sites). The data were obtained from [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/request/asos/1min.phtml) of [Iowa State University](https://www.iastate.edu/).
+
+https://user-images.githubusercontent.com/3995187/151719789-efaed15e-a498-4945-9e55-c871d0de871b.mp4
+
+https://user-images.githubusercontent.com/3995187/151719795-59948400-6674-4894-8086-1d5a3fa01c36.mp4
+
 ## Wavefront Simulation
 
 The animations below shows the simulated wavefronts of the shockwave from Hunga Tonga assuming the travel speed is 300, 305, 310, 315, or 320 m/s.
@@ -73,7 +81,7 @@ Once you have all required software packages, go to the root directory of this g
  $ python3 -m analyze.import_data asos1min
 ```
 
-The first command downloads barometric pressure data from [Japan Meteorological Agency](https://www.data.jma.go.jp/obd/stats/etrn/index.php), and the second one downloads barometric pressure data of [US Automated Surface Observing Systems (ASOS)](https://www.ncei.noaa.gov/products/land-based-station/automated-surface-weather-observing-systems) through [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/request/asos/1min.phtml) of [Iowa State University](https://www.iastate.edu/).
+The first command downloads barometric pressure data from [Japan Meteorological Agency](https://www.data.jma.go.jp/obd/stats/etrn/index.php), and the second one downloads barometric pressure data of [US Automated Surface Observing System (ASOS)](https://www.ncei.noaa.gov/products/land-based-station/automated-surface-weather-observing-systems) through [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/request/asos/1min.phtml) of [Iowa State University](https://www.iastate.edu/).
 
 These commands may take about an hour in total, so be patient.
 
