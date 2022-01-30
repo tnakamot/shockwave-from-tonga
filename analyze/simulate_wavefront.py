@@ -51,9 +51,10 @@ def draw_frame(
     ax = fig.add_subplot( 1, 1, 1, projection = projection )
     ax.set_extent( ( -180, 180, -90, 90 ), projection )
 
-    # TODO: use better colors
-    ax.add_feature( cfea.OCEAN, color = '#8080FF' )
-    ax.add_feature( cfea.LAND,  color = '#80FF80' )
+    ax.stock_img()
+    ax.add_feature( cfea.COASTLINE )
+    ax.add_feature( cfea.OCEAN )
+    ax.add_feature( cfea.LAND )
     
     time_since_eruption = timedelta( minutes = minutes_from_eruption )
     date_time = ERUPTION_TIME + time_since_eruption
