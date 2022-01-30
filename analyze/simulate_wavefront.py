@@ -42,6 +42,9 @@ def draw_frame(
         height_inch,
         dpi,
         wavefront_lines,
+        projection_method,
+        central_longitude,
+        central_latitude,
         dump_dir,
         show_message = True,
 ):
@@ -49,9 +52,17 @@ def draw_frame(
     date_time = ERUPTION_TIME + time_since_eruption
 
     fig = plt.figure( figsize = ( width_inch, height_inch ), dpi = dpi )
-    projections = [ ccrs.PlateCarree( central_longitude = 180.0 ) ]
-    # projections = [ ccrs.Geostationary( central_longitude = 180.0 ),
-    #                 ccrs.Geostationary( central_longitude =   0.0 )]
+    if projection_method == 'PlateCarree':
+        projections = [ ccrs.PlateCarree( central_longitude = central_longitude ) ]
+    elif projection_method == 'Mollweide':
+        projections = [ ccrs.Mollweide( central_longitude = central_longitude ) ]
+    elif projection_method == 'Robinson':
+        projections = [ ccrs.Robinson( central_longitude = central_longitude ) ]
+    elif projection_method == 'Orthographic':
+        projections = [ ccrs.Orthographic( central_longitude = central_longitude,
+                                           central_latitude  = central_latitude ),
+                        ccrs.Orthographic( central_longitude = 180 + central_longitude,
+                                           central_latitude  = - central_latitude )]
 
     for projection_i, projection in enumerate( projections ):
         ax = fig.add_subplot( 1, len( projections ), projection_i + 1, projection = projection )
@@ -113,6 +124,9 @@ def generate_animation(
         height_inch,
         dpi,
         animation_speed_seconds_hours,
+        projection_method,
+        central_longitude,
+        central_latitude,
         multi_process = True,
         dump_dir = None,
 ):
@@ -129,12 +143,15 @@ def generate_animation(
 
         one_process = partial(
             draw_frame,
-            width_inch      = width_inch,
-            height_inch     = height_inch,
-            dpi             = dpi,
-            wavefront_lines = wavefront_lines,
-            dump_dir        = dump_dir,
-            show_message    = False,
+            width_inch        = width_inch,
+            height_inch       = height_inch,
+            dpi               = dpi,
+            wavefront_lines   = wavefront_lines,
+            projection_method = projection_method,
+            central_longitude = central_longitude,
+            central_latitude  = central_latitude,
+            dump_dir          = dump_dir,
+            show_message      = False,
         )
 
         img_arrays = list( tqdm( pool.imap( one_process, list( simulation_range ) ),
@@ -153,6 +170,9 @@ def generate_animation(
                 height_inch,
                 dpi,
                 wavefront_lines,
+                projection_method,
+                central_longitude,
+                central_latitude,
                 dump_dir,
                 show_message = True,
             )
@@ -184,6 +204,31 @@ def create_argument_parser():
         dest = 'outdir',
         default = DEFAULT_OUTPUT_DIR,
         help = 'Output directory.',
+    )
+    parser.add_argument(
+        '--projection',
+        dest    = 'projection_method',
+        choices = ['PlateCarree', 'Mollweide', 'Robinson', 'Orthographic'],
+        default = 'PlateCarree',
+        help    = 'Map projection method.',
+    )
+    parser.add_argument(
+        '--longitude',
+        dest    = 'central_longitude',
+        type    = float,
+        default = 180.0,
+        limit   = ( -180.0, 180.0 ),
+        action  = RangeArgument,
+        help    = 'Central longitude of the map.',
+    )
+    parser.add_argument(
+        '--latitude',
+        dest    = 'central_latitude',
+        type    = float,
+        default = 0.0,
+        limit   = ( -90.0, 90.0 ),
+        action  = RangeArgument,
+        help    = 'Central latitude of the map. This parameter is effective only when the projection method is Orthographic.',
     )
     parser.add_argument(
         '--interval',
@@ -268,14 +313,17 @@ def main():
             WavefrontLine( travel_speed_m_s = 305, color = '#FFBF00' ),
             WavefrontLine( travel_speed_m_s = 300, color = '#FF0000' ),
         ],
-        interval_minutes = args.interval_minutes,
-        duration_minutes = args.duration_hours * 60,
-        width_inch       = args.width_inch,
-        height_inch      = args.height_inch,
-        dpi              = args.dpi,
+        interval_minutes  = args.interval_minutes,
+        duration_minutes  = args.duration_hours * 60,
+        width_inch        = args.width_inch,
+        height_inch       = args.height_inch,
+        dpi               = args.dpi,
         animation_speed_seconds_hours = args.animation_speed,
-        multi_process    = not args.single_process,
-        dump_dir         = Path( args.dumpdir ) if args.dumpdir else None,
+        projection_method = args.projection_method,
+        central_longitude = args.central_longitude,
+        central_latitude  = args.central_latitude,
+        multi_process     = not args.single_process,
+        dump_dir          = Path( args.dumpdir ) if args.dumpdir else None,
     )
    
 if __name__ == "__main__":
